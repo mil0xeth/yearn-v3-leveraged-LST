@@ -21,12 +21,10 @@ contract OperationTest is Setup {
 
     function test_operation(uint256 _amount) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
-
         // Deposit into strategy
         mintAndDepositIntoStrategy(strategy, user, _amount);
 
-        // TODO: Implement logic so totalDebt is _amount and totalIdle = 0.
-        checkStrategyTotals(strategy, _amount, 0, _amount);
+        checkStrategyTotals(strategy, _amount, _amount, 0);
 
         // Earn Interest
         skip(1 days);
@@ -68,7 +66,7 @@ contract OperationTest is Setup {
         mintAndDepositIntoStrategy(strategy, user, _amount);
 
         // TODO: Implement logic so totalDebt is _amount and totalIdle = 0.
-        checkStrategyTotals(strategy, _amount, 0, _amount);
+        checkStrategyTotals(strategy, _amount, _amount, 0);
 
         // Earn Interest
         skip(1 days);
@@ -97,11 +95,7 @@ contract OperationTest is Setup {
         checkStrategyTotals(strategy, 0, 0, 0);
 
         // TODO: Adjust if there are fees
-        assertGe(
-            asset.balanceOf(user),
-            balanceBefore + _amount + toAirdrop,
-            "!final balance"
-        );
+        assertGe(asset.balanceOf(user), balanceBefore + _amount + toAirdrop, "!final balance");
     }
 
     function test_profitableReport_withFees(
@@ -118,7 +112,7 @@ contract OperationTest is Setup {
         mintAndDepositIntoStrategy(strategy, user, _amount);
 
         // TODO: Implement logic so totalDebt is _amount and totalIdle = 0.
-        checkStrategyTotals(strategy, _amount, 0, _amount);
+        checkStrategyTotals(strategy, _amount, _amount, 0);
 
         // Earn Interest
         skip(1 days);
@@ -149,26 +143,14 @@ contract OperationTest is Setup {
         strategy.redeem(_amount, user, user);
 
         // TODO: Adjust if there are fees
-        assertGe(
-            asset.balanceOf(user),
-            balanceBefore + _amount,
-            "!final balance"
-        );
+        assertGe(asset.balanceOf(user), balanceBefore + _amount, "!final balance");
 
         vm.prank(performanceFeeRecipient);
-        strategy.redeem(
-            expectedShares,
-            performanceFeeRecipient,
-            performanceFeeRecipient
-        );
+        strategy.redeem(expectedShares, performanceFeeRecipient, performanceFeeRecipient);
 
         checkStrategyTotals(strategy, 0, 0, 0);
 
-        assertGe(
-            asset.balanceOf(performanceFeeRecipient),
-            expectedShares,
-            "!perf fee out"
-        );
+        assertGe(asset.balanceOf(performanceFeeRecipient), expectedShares, "!perf fee out");
     }
 
     function test_tendTrigger(uint256 _amount) public {

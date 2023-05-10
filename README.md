@@ -1,8 +1,7 @@
-# Tokenized Strategy Mix for Yearn V3 strategies
+# AAVE-Delta-Neutral-st-yCRV Strategy for Yearn V3 (foundry)
+Strategy collateralizes asset on AAVE (V3) and borrows CRV token to deposit into st-yCRV.
 
-This repo will allow you to write, test and deploy V3 "Tokenized Strategies" using [Foundry](https://book.getfoundry.sh/).
-
-You will only need to override the three functions in Strategy.sol of `_invest`, `_freeFunds` and `_totalInvested`. With the option to also override `_tend`, `tendTrigger`, `availableDepositLimit` and `availableWithdrawLimit` if desired.
+This repo uses [Foundry](https://book.getfoundry.sh/) for tests.
 
 For a more complete overview of how the Tokenized Strategies work please visit the [TokenizedStrategy Repo](https://github.com/yearn/tokenized-strategy).
 
@@ -11,15 +10,6 @@ For a more complete overview of how the Tokenized Strategies work please visit t
 ### Requirements
 First you will need to install [Foundry](https://book.getfoundry.sh/getting-started/installation).
 NOTE: If you are on a windows machine it is recommended to use [WSL](https://learn.microsoft.com/en-us/windows/wsl/install)
-
-### Fork this repository
-
-    git clone --recursive https://github.com/user/tokenized-strategy-foundry-mix
-
-    cd tokenized-strategy-foundry-mix
-
-    yarn
-
 
 ### Set your environment Variables
 
@@ -42,38 +32,6 @@ Run tests
 ```sh
 make test
 ```
-
-## Strategy Writing
-
-### Good to know
-
-To create your tokenized Strategy, you must override at least 3 functions outlined in `Strategy.sol`. An in-depth description for each function is provided above each function in `Strategy.sol`.
-
-It is important to remember the default behavior for any tokenized strategy is to be a permissionless vault, so functions such as _invest and _freeFunds can be called by anyone, and care should be taken when implementing manipulatable logic such as swaps/lp movements. Strategists can choose to limit deposit/withdraw by overriding the `availableWithdrawLimit` and `availableDepositLimit` function if it is needed for safety.
-
-
-It is recommended to build strategies on the assumption that reports will happen based on the strategies specific `profitMaxUnlockTime`. Since this is the only time _totalInvested will be called any strategies that need more frequent checks or updates should override the _tend and tendTrigger functions for any needed mid-report maintenance.
-
-The only default global variables from the BaseTokenizedStrategy that can be accessed from storage is `asset` and `TokenizedStrategy`. If other global variables are needed for your specific strategy, you can use the `TokenizedStrategy` variable to quickly retrieve any other needed variables withen the strategy, such as totalAssets, totalDebt, isShutdown etc.
-
-
-Example:
-
-    require(!TokenizedStrategy.isShutdown(), "strategy is shutdown");
-
-
-NOTE: It is impossible to write to a strategy's default global storage state internally post-deployment. You must make external calls from the `management` address to configure any of the desired variables.
-
-To include permissioned functions such as extra setters, the two modifiers of `onlyManagement` and `onlyManagementAndKeepers` are available by default.
-
-Cloning is available natively through the BaseTokenizedStrategy and can be easily done using `TokenizedStrategy.clone(...)`. The cloning function will initialize all default storage needed for the BaseTokenizedStrategy as specified in the parameters of the clone function, but an internal initialize function will need to be used for any strategy-specific initialization, such as approvals.
-
-NOTE: When cloning while using Periphery Helpers, you should reset all variables from the helper contract that will be used. The periphery contracts leave all global variables as non-constants so they can be overridden by the strategys. This means when cloning, they will all default back to 0, address(0), etc.
-
-
-The symbol used for each tokenized Strategy is set automatically with a standardized approach based on the `asset`'s symbol. Strategists should use the `name` parameter in the constructor for a unique and descriptive name that encapsulates their specific Strategy. Standard naming conventions will include the asset name, the protocol used to generate yield, and the method rewards are sold if applicable. I.e., "Weth-AaveV3Lender-UniV3Swapper".
-
-All other functionality, such as reward selling, emergency functions, upgradability, etc., is up to the strategist to determine what best fits their vision. Due to the ability of strategies to stand alone from a Vault, it is expected and encouraged for strategists to experiment with more complex, risky, or previously unfeasible Strategies.
 
 ## Periphery
 

@@ -3,32 +3,69 @@ pragma solidity 0.8.18;
 
 import {BaseTokenizedStrategy} from "@tokenized-strategy/BaseTokenizedStrategy.sol";
 
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-// Import interfaces for many popular DeFi projects, or add your own!
-//import "../interfaces/<protocol>/<Interface>.sol";
+import {IAToken} from "./interfaces/Aave/V3/IAtoken.sol";
+import {IStakedAave} from "./interfaces/Aave/V3/IStakedAave.sol";
+import {IPool} from "./interfaces/Aave/V3/IPool.sol";
+import {IProtocolDataProvider} from "./interfaces/Aave/V3/IProtocolDataProvider.sol";
+import {IRewardsController} from "./interfaces/Aave/V3/IRewardsController.sol";
 
-/**
- * The `TokenizedStrategy` variable can be used to retrieve the strategies
- * specifc storage data your contract.
- *
- *       i.e. uint256 totalAssets = TokenizedStrategy.totalAssets()
- *
- * This can not be used for write functions. Any TokenizedStrategy
- * variables that need to be udpated post deployement will need to
- * come from an external call from the strategies specific `management`.
- */
+// Uniswap V3 Swapper
+import {UniswapV3Swapper} from "@periphery/swappers/UniswapV3Swapper.sol";
 
-// NOTE: To implement permissioned functions you can use the onlyManagement and onlyKeepers modifiers
-
-contract Strategy is BaseTokenizedStrategy {
+contract Strategy is BaseTokenizedStrategy, UniswapV3Swapper {
     using SafeERC20 for ERC20;
+
+    IProtocolDataProvider public constant protocolDataProvider = IProtocolDataProvider(0x7B4EB56E7CD4b454BA8ff71E4518426369a138a3);
+    IPool public lendingPool;
+    IRewardsController public rewardsController;
+    IAToken public aToken;
+
+    // stkAave addresses only Applicable for Mainnet.
+    IStakedAave internal constant stkAave = IStakedAave(0x4da27a545c0c5B758a6BA100e3a049001de870f5);
+    address internal constant AAVE = 0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9;
 
     constructor(
         address _asset,
         string memory _name
-    ) BaseTokenizedStrategy(_asset, _name) {}
+    ) BaseTokenizedStrategy(_asset, _name) {
+        initializeStrategy(_asset);
+    }
+
+    function initializeStrategy(address _asset) public {
+        require(address(aToken) == address(0), "already initialized");
+
+        lendingPool = IPool(protocolDataProvider.ADDRESSES_PROVIDER().getPool());
+        aToken = IAToken(lendingPool.getReserveData(asset).aTokenAddress);
+
+        require(address(aToken) != address(0), "!aToken");
+
+        rewardsController = aToken.getIncentivesController();
+
+        ERC20(_asset).safeApprove(address(lendingPool), type(uint256).max);
+
+        // Set uni swapper values
+        minAmountToSell = 1e4;
+        base = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+        router = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
+    }
+
+    function setUniFees(
+        address _token0,
+        address _token1,
+        uint24 _fee
+    ) external onlyManagement {
+        _setUniFees(_token0, _token1, _fee);
+    }
+
+    function setMinAmountToSell(
+        uint256 _minAmountToSell
+    ) external onlyManagement {
+        minAmountToSell = _minAmountToSell;
+    }
 
     /*//////////////////////////////////////////////////////////////
                 NEEDED TO BE OVERRIDEN BY STRATEGIST
@@ -44,11 +81,11 @@ contract Strategy is BaseTokenizedStrategy {
      *
      * @param _amount The amount of 'asset' that the strategy should attemppt
      * to deposit in the yield source.
+     *
+     *call: user deposits --> _invest
      */
     function _invest(uint256 _amount) internal override {
-        // TODO: implement deposit logice EX:
-        //
-        //      lendingpool.deposit(asset, _amount ,0);
+        lendingPool.supply(asset, _amount, address(this), 0);
     }
 
     /**
@@ -56,6 +93,9 @@ contract Strategy is BaseTokenizedStrategy {
      *
      * The amount of 'asset' that is already loose has already
      * been accounted for.
+     *
+     * Should do any needed parameter checks, '_amount' may be more
+     * than is actually available.
      *
      * This function is called {withdraw} and {redeem} calls.
      * Meaning that unless a whitelist is implemented it will be
@@ -65,17 +105,20 @@ contract Strategy is BaseTokenizedStrategy {
      * Should not rely on asset.balanceOf(address(this)) calls other than
      * for diff accounting puroposes.
      *
-     * Any difference between `_amount` and what is actually freed will be
-     * counted as a loss and passed on to the withdrawer. This means
-     * care should be taken in times of illiquidity. It may be better to revert
-     * if withdraws are simply illiquid so not to realize incorrect losses.
-     *
      * @param _amount, The amount of 'asset' to be freed.
+     *
+     *
+     * call: user withdraws --> _freeFunds
      */
     function _freeFunds(uint256 _amount) internal override {
-        // TODO: implement withdraw logic EX:
-        //
-        //      lendingPool.withdraw(asset, _amount);
+        // We dont check available liquidity because we need the tx to
+        // revert if there is not enough liquidity so we dont improperly
+        // pass a loss on to the user withdrawing.
+        lendingPool.withdraw(
+            asset,
+            Math.min(aToken.balanceOf(address(this)), _amount),
+            address(this)
+        );
     }
 
     /**
@@ -92,113 +135,146 @@ contract Strategy is BaseTokenizedStrategy {
      * than actual amounts as all Strategy profit/loss accounting will
      * be done based on this returned value.
      *
-     * This can still be called post a shutdown, a strategist can check
-     * `TokenizedStrategy.isShutdown()` to decide if funds should be reinvested
-     * or simply realize any profits/losses.
-     *
      * @return _invested A trusted and accurate account for the total
      * amount of 'asset' the strategy currently holds.
+     *
+     *
+     * call: keeper harvests & asks for accurate current assets after harvest
      */
     function _totalInvested() internal override returns (uint256 _invested) {
-        // TODO: Implement harvesting logic and accurate accounting EX:
-        //
-        //      _claminAndSellRewards();
-        //      _invested = aToken.balanceof(address(this)) + ERC20(asset).balanceOf(address(this));
-        _invested = ERC20(asset).balanceOf(address(this));
+        // Claim and sell any STKAAVE rewards to `asset`.
+        _claimAndSellRewards();
+
+        // deposit any loose funds
+        uint256 looseAsset = ERC20(asset).balanceOf(address(this));
+        if (looseAsset > 0 && !TokenizedStrategy.isShutdown()) {
+            lendingPool.supply(asset, looseAsset, address(this), 0);
+        }
+
+        _invested = aToken.balanceOf(address(this)) + ERC20(asset).balanceOf(address(this));
     }
 
     /*//////////////////////////////////////////////////////////////
-                    OPTIONAL TO OVERRIDE BY STRATEGIST
+                INTERNAL:
     //////////////////////////////////////////////////////////////*/
 
-    /**
-     * @dev Optional function for strategist to override that can
-     *  be called in between reports.
-     *
-     * If '_tend' is used tendTrigger() will also need to be overridden.
-     *
-     * This call can only be called by a persionned role so may be
-     * through protected relays.
-     *
-     * This can be used to harvest and compound rewards, deposit idle funds,
-     * perform needed poisition maintence or anything else that doesn't need
-     * a full report for.
-     *
-     *   EX: A strategy that can not deposit funds without getting
-     *       sandwhiched can use the tend when a certain threshold
-     *       of idle to totalAssets has been reached.
-     *
-     * The TokenizedStrategy contract will do all needed debt and idle updates
-     * after this has finished and will have no effect on PPS of the strategy 
-     * till report() is called.
-     *
-     * @param _totalIdle The current amount of idle funds that are available to invest.
-     *
-    function _tend(uint256 _totalIdle) internal override {}
-    */
-
-    /**
-     * @notice Returns wether or not tend() should be called by a keeper.
-     * @dev Optional trigger to override if tend() will be used by the strategy.
-     * This must be implemented if the strategy hopes to invoke _tend().
-     *
-     * @return . Should return true if tend() should be called by keeper or false if not.
-     *
-    function tendTrigger() public view override returns (bool) {}
-    */
-
-    /**
-     * @notice Gets the max amount of `asset` that an adress can deposit.
-     * @dev Defaults to an unlimited amount for any address. But can
-     * be overriden by strategists.
-     *
-     * This function will be called before any deposit or mints to enforce
-     * any limits desired by the strategist. This can be used for either a
-     * traditional deposit limit or for implementing a whitelist.
-     *
-     *   EX:
-     *      if(isAllowed[_owner]) return super.availableDepositLimit(_owner);
-     *
-     * This does not need to take into account any conversion rates
-     * from shares to assets.
-     *
-     * @param . The address that is depositing into the strategy.
-     * @return . The avialable amount the `_owner can deposit in terms of `asset`
-     *
-    function availableDepositLimit(
-        address _owner
-    ) public view override returns (uint256) {
-        TODO: If desired Implement deposit limit logic and any needed state variables EX:
-            
-            uint256 totalAssets = TokenizedStrategy.totalAssets();
-            return totalAssets >= depositLimit ? 0 : depositLimit - totalAssets;
+    function emergencyWithdraw(uint256 _amount) external onlyManagement {
+        lendingPool.withdraw(asset, _amount, address(this));
     }
-    */
 
-    /**
-     * @notice Gets the max amount of `asset` that can be withdrawn.
-     * @dev Defaults to an unlimited amount for any address. But can
-     * be overriden by strategists.
-     *
-     * This function will be called before any withdraw or redeem to enforce
-     * any limits desired by the strategist. This can be used for illiquid
-     * or sandwhichable strategies. It should never be lower than `totalIdle`.
-     *
-     *   EX:
-     *       return TokenIzedStrategy.totalIdle();
-     *
-     * This does not need to take into account the `_owner`'s share balance
-     * or conversion rates from shares to assets.
-     *
-     * @param . The address that is withdrawing from the strategy.
-     * @return . The avialable amount that can be withdrawn in terms of `asset`
-     *
-    function availableWithdrawLimit(
-        address _owner
-    ) public view override returns (uint256) {
-        TODO: If desired Implement withdraw limit logic and any needed state variables EX:
-            
-            return TokenizedStrategy.totalIdle();
+    function cloneStrategy(
+        address _asset,
+        string memory _name,
+        address _management,
+        address _performanceFeeRecipient,
+        address _keeper
+    ) external returns (address newLender) {
+        // Use the cloning logic held withen the Base library.
+        newLender = TokenizedStrategy.clone(
+            _asset,
+            _name,
+            _management,
+            _performanceFeeRecipient,
+            _keeper
+        );
+        // Neeed to cast address to payable since there is a fallback function.
+        Strategy(payable(newLender)).initializeStrategy(_asset);
     }
-    */
+
+
+
+
+
+
+
+
+
+
+
+    /*//////////////////////////////////////////////////////////////
+               AAVE TOKEN & STKAAVE TOKEN FUNCTIONS:
+    //////////////////////////////////////////////////////////////*/
+
+    
+    function _claimAndSellRewards() internal {
+        // Need to redeem any aave from StkAave if applicable before
+        // claiming rewards and staring cool down over
+        _redeemAave();
+
+        //claim all rewards
+        address[] memory assets = new address[](1);
+        assets[0] = address(aToken);
+        (address[] memory rewardsList, ) = rewardsController
+            .claimAllRewardsToSelf(assets);
+
+        //swap as much as possible back to want
+        address token;
+        for (uint256 i = 0; i < rewardsList.length; ++i) {
+            token = rewardsList[i];
+
+            if (token == address(stkAave)) {
+                _harvestStkAave();
+            } else if (token == asset) {
+                continue;
+            } else {
+                _swapFrom(
+                    token,
+                    asset,
+                    ERC20(token).balanceOf(address(this)),
+                    0
+                );
+            }
+        }
+    }
+
+    function _redeemAave() internal {
+        if (!_checkCooldown()) {
+            return;
+        }
+
+        uint256 stkAaveBalance = ERC20(address(stkAave)).balanceOf(
+            address(this)
+        );
+
+        if (stkAaveBalance > 0) {
+            stkAave.redeem(address(this), stkAaveBalance);
+        }
+
+        // sell AAVE for want
+        _swapFrom(AAVE, asset, ERC20(AAVE).balanceOf(address(this)), 0);
+    }
+
+    function _checkCooldown() internal view returns (bool) {
+        if (block.chainid != 1) {
+            return false;
+        }
+
+        uint256 cooldownStartTimestamp = IStakedAave(stkAave).stakersCooldowns(
+            address(this)
+        );
+
+        if (cooldownStartTimestamp == 0) return false;
+
+        uint256 COOLDOWN_SECONDS = IStakedAave(stkAave).COOLDOWN_SECONDS();
+        uint256 UNSTAKE_WINDOW = IStakedAave(stkAave).UNSTAKE_WINDOW();
+        if (block.timestamp >= cooldownStartTimestamp + COOLDOWN_SECONDS) {
+            return
+                block.timestamp - (cooldownStartTimestamp + COOLDOWN_SECONDS) <=
+                UNSTAKE_WINDOW;
+        } else {
+            return false;
+        }
+    }
+
+    function _harvestStkAave() internal {
+        // request start of cooldown period
+        if (ERC20(address(stkAave)).balanceOf(address(this)) > 0) {
+            stkAave.cooldown();
+        }
+    }
+
+    function manualRedeemAave() external onlyKeepers {
+        _redeemAave();
+    }
+    
 }
