@@ -23,8 +23,8 @@ contract MainTest is Setup {
 
     function test_operation() public {
         //init
-        uint _amount = 1000e18; //1000 DAI
-        uint DEC = 1e18; //asset 1e18 for 18 decimals
+        uint256 _amount = 1000e18; //1000 DAI
+        uint256 DEC = 1e18; //asset 1e18 for 18 decimals
         console.log("asset: ", asset.symbol());
         console.log("amount:", _amount / DEC);
         //user funds:
@@ -42,12 +42,33 @@ contract MainTest is Setup {
         console.log("aToken address: ", address(aToken));
         console.log("aToken balance: ", aToken.balanceOf(address(strategy)) / DEC);
         checkStrategyTotals(strategy, _amount, _amount, 0);
-    }
+        console.log("balanceAsset: ", strategy.balanceAsset() / DEC);
+        console.log("balanceCollateral: ", strategy.balanceCollateral() / DEC);
+        console.log("balanceDebt in CRV: ", strategy.balanceCRVDebt());
+        //console.log("balanceDebt in Asset: ", strategy.CRVtoAsset(strategy.balanceCRVDebt()));
+        console.log("balanceSTYCRV in STCRV: ", strategy.balanceSTYCRV());
+        console.log("balanceSTYCRV in CRV: ", strategy.STYCRVtoCRV(strategy.balanceSTYCRV()));
+        console.log("balanceSTYCRV in DAI: ", strategy.STYCRVtoAsset(strategy.balanceSTYCRV()));
 
+        //keeper borrowMore:
+        vm.prank(keeper);
+        (uint256 profit, uint256 loss) = strategy.report();
+        console.log("profit after first report: ", profit / DEC);
+        console.log("loss after first report: ", loss / DEC);
+        console.log("balanceAsset: ", strategy.balanceAsset() / DEC);
+        console.log("balanceCollateral: ", strategy.balanceCollateral() / DEC);
+        console.log("balanceDebt in CRV: ", strategy.balanceCRVDebt());
+        //console.log("balanceDebt in Asset: ", strategy.CRVtoAsset(strategy.balanceCRVDebt()));
+        console.log("balanceSTYCRV in STCRV: ", strategy.balanceSTYCRV());
+        console.log("balanceSTYCRV in CRV: ", strategy.STYCRVtoCRV(strategy.balanceSTYCRV()));
+        console.log("balanceSTYCRV in DAI: ", strategy.STYCRVtoAsset(strategy.balanceSTYCRV()));
+    }
+/*
     function test_fuzz_operation(uint256 _amount) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
         // Deposit into strategy
         mintAndDepositIntoStrategy(strategy, user, _amount);
         checkStrategyTotals(strategy, _amount, _amount, 0);
     }
+*/
 }

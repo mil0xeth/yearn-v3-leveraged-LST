@@ -24,4 +24,11 @@ interface IStrategyInterface is IStrategy, IUniswapV3Swapper {
     ) external returns (address newLender);
 
     function aToken() external view returns (address);
+    function balanceAsset() external view returns (uint256);
+    function balanceCollateral() external view returns (uint256);
+    function balanceCRVDebt() external view returns (uint256);
+    function balanceSTYCRVDebt() external view returns (uint256);
+    function CRVToAsset(uint256 _CRVAmount) external view returns (uint256);
+    function STYCRVToCRV(uint256 _STYCRVAmount) external view returns (uint256);
+    function STYCRVToAsset(uint256 _STYCRVAmount) external view returns (uint256);
 }
