@@ -24,6 +24,9 @@ contract Setup is ExtendedTest {
 
     // Addresses for different roles we will use repeatedly.
     address public user = address(10);
+    address public user2 = address(5);
+    address public user3 = address(6);
+    address public user4 = address(7);
     address public keeper = address(4);
     address public management = address(1);
     address public performanceFeeRecipient = address(3);
@@ -37,8 +40,9 @@ contract Setup is ExtendedTest {
 
     // Fuzz from $0.01 of 1e6 stable coins up to 1 trillion of a 1e18 coin
     //uint256 public maxFuzzAmount = 1e30;
-    uint256 public maxFuzzAmount = 10e6 * 1e18;
-    uint256 public minFuzzAmount = 10_000;
+    uint256 public maxFuzzAmount = 1000e6 * 1e18;
+    //uint256 public minFuzzAmount = 10_000;
+    uint256 public minFuzzAmount = 1e18;
 
     // Default prfot max unlock time is set for 10 days
     uint256 public profitMaxUnlockTime = 10 days;

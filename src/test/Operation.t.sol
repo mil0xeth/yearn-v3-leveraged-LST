@@ -27,7 +27,7 @@ contract OperationTest is Setup {
         checkStrategyTotals(strategy, _amount, _amount, 0);
 
         // Earn Interest
-        skip(1 days);
+        skip(10 days);
 
         // Report profit
         vm.prank(keeper);

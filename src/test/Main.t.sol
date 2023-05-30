@@ -4,9 +4,12 @@ pragma solidity ^0.8.18;
 import "forge-std/console.sol";
 import {Setup} from "./utils/Setup.sol";
 
-import {IAToken} from "../interfaces/Aave/V3/IAtoken.sol";
+import "../interfaces/maker/IMaker.sol";
 
 contract MainTest is Setup {
+
+    PotLike public pot = PotLike(0x197E90f9FAD81970bA7976f33CbD77088E5D7cf7);
+
     function setUp() public override {
         super.setUp();
     }
@@ -25,6 +28,9 @@ contract MainTest is Setup {
         //init
         uint256 _amount = 1000e18; //1000 DAI
         uint256 DEC = 1e18; //asset 1e18 for 18 decimals
+        uint256 profit;
+        uint256 loss;
+        DEC = 1;
         console.log("asset: ", asset.symbol());
         console.log("amount:", _amount / DEC);
         //user funds:
@@ -37,31 +43,148 @@ contract MainTest is Setup {
         console.log("strategy.totalAssets() after deposit: ", strategy.totalAssets() / DEC);
         console.log("strategy.totalDebt() after deposit: ", strategy.totalDebt() / DEC);
         console.log("strategy.totalIdle() after deposit: ", strategy.totalIdle() / DEC);
-        //aToken amount:
-        IAToken aToken = IAToken(strategy.aToken());
-        console.log("aToken address: ", address(aToken));
-        console.log("aToken balance: ", aToken.balanceOf(address(strategy)) / DEC);
-        checkStrategyTotals(strategy, _amount, _amount, 0);
-        console.log("balanceAsset: ", strategy.balanceAsset() / DEC);
-        console.log("balanceCollateral: ", strategy.balanceCollateral() / DEC);
-        console.log("balanceDebt in CRV: ", strategy.balanceCRVDebt());
-        //console.log("balanceDebt in Asset: ", strategy.CRVtoAsset(strategy.balanceCRVDebt()));
-        console.log("balanceSTYCRV in STCRV: ", strategy.balanceSTYCRV());
-        console.log("balanceSTYCRV in CRV: ", strategy.STYCRVtoCRV(strategy.balanceSTYCRV()));
-        console.log("balanceSTYCRV in DAI: ", strategy.STYCRVtoAsset(strategy.balanceSTYCRV()));
+        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
+        console.log("balanceUpdatedDSR: ", strategy.balanceUpdatedDSR() / DEC);
+        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
+        console.log("pot.pie(): ", pot.pie(address(strategy)) / DEC);
+        console.log("daiBalance: ", asset.balanceOf(address(strategy)) / DEC);
+        console.log("assetBalance: ", strategy.balanceAsset() / DEC);
 
-        //keeper borrowMore:
+        // Earn Interest
+        skip(1 days);
+
+        console.log("skip strategy.totalAssets() after deposit: ", strategy.totalAssets() / DEC);
+        console.log("strategy.totalDebt() after deposit: ", strategy.totalDebt() / DEC);
+        console.log("strategy.totalIdle() after deposit: ", strategy.totalIdle() / DEC);
+        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
+        console.log("balanceUpdatedDSR: ", strategy.balanceUpdatedDSR() / DEC);
+        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
+        console.log("pot.pie(): ", pot.pie(address(strategy)) / DEC);
+        console.log("daiBalance: ", asset.balanceOf(address(strategy)) / DEC);
+        console.log("assetBalance: ", strategy.balanceAsset() / DEC);
+
+        // Report profit / loss
+        vm.prank(keeper);
+        (profit, loss) = strategy.report();
+        console.log("profit: ", profit / DEC);
+        console.log("loss: ", loss / DEC);
+
+
+
+/*
+        //user 2, user 3 funds:
+        airdrop(asset, user2, _amount);
+        depositIntoStrategy(strategy, user2, _amount);
+        airdrop(asset, user3, _amount);
+        depositIntoStrategy(strategy, user3, _amount);
+
+        //airdrop:
+        uint256 toAirdrop = 10e18; //10 DAI
+        airdrop(asset, address(strategy), toAirdrop);
+        console.log("airdrop strategy.totalAssets() after deposit: ", strategy.totalAssets() / DEC);
+        console.log("strategy.totalDebt() after deposit: ", strategy.totalDebt() / DEC);
+        console.log("strategy.totalIdle() after deposit: ", strategy.totalIdle() / DEC);
+        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
+        console.log("balanceUpdatedDSR: ", strategy.balanceUpdatedDSR() / DEC);
+        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
+        console.log("pot.pie(): ", pot.pie(address(strategy)) / DEC);
+        console.log("daiBalance: ", asset.balanceOf(address(strategy)) / DEC);
+        console.log("assetBalance: ", strategy.balanceAsset() / DEC);
+        console.log("asset.balanceOf(user): ", asset.balanceOf(user) / DEC);
+
+        // Report profit / loss
+        vm.prank(keeper);
+        (profit, loss) = strategy.report();
+        console.log("profit: ", profit / DEC);
+        console.log("loss: ", loss / DEC);
+
+        //user4 deposit:
+        airdrop(asset, user4, _amount);
+        depositIntoStrategy(strategy, user4, _amount);
+
+        skip(strategy.profitMaxUnlockTime()/2);
+
+        // Withdraw all funds
+        vm.prank(user4);
+        strategy.redeem(_amount, user4, user4);
+        console.log("redeem strategy.totalAssets() after deposit: ", strategy.totalAssets() / DEC);
+        console.log("strategy.totalDebt() after deposit: ", strategy.totalDebt() / DEC);
+        console.log("strategy.totalIdle() after deposit: ", strategy.totalIdle() / DEC);
+        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
+        console.log("balanceUpdatedDSR: ", strategy.balanceUpdatedDSR() / DEC);
+        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
+        console.log("pot.pie(): ", pot.pie(address(strategy)) / DEC);
+        console.log("daiBalance: ", asset.balanceOf(address(strategy)) / DEC);
+        console.log("assetBalance: ", strategy.balanceAsset() / DEC);
+        console.log("asset.balanceOf(user4): ", asset.balanceOf(user4) / DEC);
+*/
+/*
+
+        // Report profit / loss
+        vm.prank(keeper);
+        (profit, loss) = strategy.report();
+        console.log("profit: ", profit / DEC);
+        console.log("loss: ", loss / DEC);
+
+        // Withdraw all funds
+        vm.prank(user);
+        strategy.redeem(_amount, user, user);
+        console.log("redeem strategy.totalAssets() after deposit: ", strategy.totalAssets() / DEC);
+        console.log("strategy.totalDebt() after deposit: ", strategy.totalDebt() / DEC);
+        console.log("strategy.totalIdle() after deposit: ", strategy.totalIdle() / DEC);
+        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
+        console.log("balanceUpdatedDSR: ", strategy.balanceUpdatedDSR() / DEC);
+        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
+        console.log("pot.pie(): ", pot.pie(address(strategy)) / DEC);
+        console.log("daiBalance: ", asset.balanceOf(address(strategy)) / DEC);
+        console.log("assetBalance: ", strategy.balanceAsset() / DEC);
+        console.log("asset.balanceOf(user): ", asset.balanceOf(user) / DEC);
+
+        console.log("profitMaxUnlockTime: ", strategy.profitMaxUnlockTime());
+
+        //skip(strategy.profitMaxUnlockTime());
+*/
+
+/*
+        // Report profit / loss
         vm.prank(keeper);
         (uint256 profit, uint256 loss) = strategy.report();
-        console.log("profit after first report: ", profit / DEC);
-        console.log("loss after first report: ", loss / DEC);
-        console.log("balanceAsset: ", strategy.balanceAsset() / DEC);
-        console.log("balanceCollateral: ", strategy.balanceCollateral() / DEC);
-        console.log("balanceDebt in CRV: ", strategy.balanceCRVDebt());
-        //console.log("balanceDebt in Asset: ", strategy.CRVtoAsset(strategy.balanceCRVDebt()));
-        console.log("balanceSTYCRV in STCRV: ", strategy.balanceSTYCRV());
-        console.log("balanceSTYCRV in CRV: ", strategy.STYCRVtoCRV(strategy.balanceSTYCRV()));
-        console.log("balanceSTYCRV in DAI: ", strategy.STYCRVtoAsset(strategy.balanceSTYCRV()));
+        console.log("profit: ", profit / DEC);
+        console.log("loss: ", loss / DEC);
+
+
+
+        console.log("strategy.totalAssets() after deposit: ", strategy.totalAssets() / DEC);
+        console.log("strategy.totalDebt() after deposit: ", strategy.totalDebt() / DEC);
+        console.log("strategy.totalIdle() after deposit: ", strategy.totalIdle() / DEC);
+        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
+        console.log("balanceUpdatedDSR: ", strategy.balanceUpdatedDSR() / DEC);
+        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
+        console.log("pot.pie(): ", pot.pie(address(strategy)) / DEC);
+        console.log("daiBalance: ", asset.balanceOf(address(strategy)) / DEC);
+        console.log("assetBalance: ", strategy.balanceAsset() / DEC);
+        console.log("asset.balanceOf(user): ", asset.balanceOf(user) / DEC);
+
+
+
+        // Withdraw all funds
+        vm.prank(user);
+        strategy.redeem(_amount, user, user);
+
+        console.log("strategy.totalAssets() after deposit: ", strategy.totalAssets() / DEC);
+        console.log("strategy.totalDebt() after deposit: ", strategy.totalDebt() / DEC);
+        console.log("strategy.totalIdle() after deposit: ", strategy.totalIdle() / DEC);
+        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
+        console.log("balanceUpdatedDSR: ", strategy.balanceUpdatedDSR() / DEC);
+        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
+        console.log("pot.pie(): ", pot.pie(address(strategy)) / DEC);
+        console.log("daiBalance: ", asset.balanceOf(address(strategy)) / DEC);
+        console.log("assetBalance: ", strategy.balanceAsset() / DEC);
+        console.log("asset.balanceOf(user): ", asset.balanceOf(user) / DEC);
+
+        skip(strategy.profitMaxUnlockTime());
+*/
+
     }
 /*
     function test_fuzz_operation(uint256 _amount) public {
@@ -71,4 +194,14 @@ contract MainTest is Setup {
         checkStrategyTotals(strategy, _amount, _amount, 0);
     }
 */
+}
+
+
+interface PotLike {
+    function chi() external view returns (uint256);
+    function rho() external view returns (uint256);
+    function drip() external returns (uint256);
+    function join(uint256) external;
+    function exit(uint256) external;
+    function pie(address) external view returns (uint256);
 }
