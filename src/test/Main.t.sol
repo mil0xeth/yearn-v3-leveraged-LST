@@ -51,150 +51,138 @@ contract MainTest is Setup {
         console.log("assetBalance: ", strategy.balanceAsset() / DEC);
 
         // Earn Interest
-        skip(1 days);
+        skip(55 days);
+        // Report profit / loss
+        vm.prank(keeper);
+        (profit, loss) = strategy.report();
+        console.log("profit: ", profit / DEC);
+        console.log("loss: ", loss / DEC);
+        skip(10 days);
 
-        console.log("skip strategy.totalAssets() after deposit: ", strategy.totalAssets() / DEC);
-        console.log("strategy.totalDebt() after deposit: ", strategy.totalDebt() / DEC);
-        console.log("strategy.totalIdle() after deposit: ", strategy.totalIdle() / DEC);
-        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
-        console.log("balanceUpdatedDSR: ", strategy.balanceUpdatedDSR() / DEC);
-        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
-        console.log("pot.pie(): ", pot.pie(address(strategy)) / DEC);
-        console.log("daiBalance: ", asset.balanceOf(address(strategy)) / DEC);
-        console.log("assetBalance: ", strategy.balanceAsset() / DEC);
 
+        skip(100 days);
         // Report profit / loss
         vm.prank(keeper);
         (profit, loss) = strategy.report();
         console.log("profit: ", profit / DEC);
         console.log("loss: ", loss / DEC);
 
-
-
-/*
-        //user 2, user 3 funds:
-        airdrop(asset, user2, _amount);
-        depositIntoStrategy(strategy, user2, _amount);
-        airdrop(asset, user3, _amount);
-        depositIntoStrategy(strategy, user3, _amount);
-
-        //airdrop:
-        uint256 toAirdrop = 10e18; //10 DAI
-        airdrop(asset, address(strategy), toAirdrop);
-        console.log("airdrop strategy.totalAssets() after deposit: ", strategy.totalAssets() / DEC);
-        console.log("strategy.totalDebt() after deposit: ", strategy.totalDebt() / DEC);
-        console.log("strategy.totalIdle() after deposit: ", strategy.totalIdle() / DEC);
-        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
-        console.log("balanceUpdatedDSR: ", strategy.balanceUpdatedDSR() / DEC);
-        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
-        console.log("pot.pie(): ", pot.pie(address(strategy)) / DEC);
-        console.log("daiBalance: ", asset.balanceOf(address(strategy)) / DEC);
-        console.log("assetBalance: ", strategy.balanceAsset() / DEC);
-        console.log("asset.balanceOf(user): ", asset.balanceOf(user) / DEC);
-
+        skip(100 days);
         // Report profit / loss
         vm.prank(keeper);
         (profit, loss) = strategy.report();
         console.log("profit: ", profit / DEC);
         console.log("loss: ", loss / DEC);
 
-        //user4 deposit:
-        airdrop(asset, user4, _amount);
-        depositIntoStrategy(strategy, user4, _amount);
-
-        skip(strategy.profitMaxUnlockTime()/2);
-
-        // Withdraw all funds
-        vm.prank(user4);
-        strategy.redeem(_amount, user4, user4);
-        console.log("redeem strategy.totalAssets() after deposit: ", strategy.totalAssets() / DEC);
-        console.log("strategy.totalDebt() after deposit: ", strategy.totalDebt() / DEC);
-        console.log("strategy.totalIdle() after deposit: ", strategy.totalIdle() / DEC);
-        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
-        console.log("balanceUpdatedDSR: ", strategy.balanceUpdatedDSR() / DEC);
-        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
-        console.log("pot.pie(): ", pot.pie(address(strategy)) / DEC);
-        console.log("daiBalance: ", asset.balanceOf(address(strategy)) / DEC);
-        console.log("assetBalance: ", strategy.balanceAsset() / DEC);
-        console.log("asset.balanceOf(user4): ", asset.balanceOf(user4) / DEC);
-*/
-/*
-
+        skip(100 days);
         // Report profit / loss
         vm.prank(keeper);
         (profit, loss) = strategy.report();
         console.log("profit: ", profit / DEC);
         console.log("loss: ", loss / DEC);
-
-        // Withdraw all funds
-        vm.prank(user);
-        strategy.redeem(_amount, user, user);
-        console.log("redeem strategy.totalAssets() after deposit: ", strategy.totalAssets() / DEC);
-        console.log("strategy.totalDebt() after deposit: ", strategy.totalDebt() / DEC);
-        console.log("strategy.totalIdle() after deposit: ", strategy.totalIdle() / DEC);
-        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
-        console.log("balanceUpdatedDSR: ", strategy.balanceUpdatedDSR() / DEC);
-        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
-        console.log("pot.pie(): ", pot.pie(address(strategy)) / DEC);
-        console.log("daiBalance: ", asset.balanceOf(address(strategy)) / DEC);
-        console.log("assetBalance: ", strategy.balanceAsset() / DEC);
-        console.log("asset.balanceOf(user): ", asset.balanceOf(user) / DEC);
-
-        console.log("profitMaxUnlockTime: ", strategy.profitMaxUnlockTime());
-
-        //skip(strategy.profitMaxUnlockTime());
-*/
-
-/*
-        // Report profit / loss
-        vm.prank(keeper);
-        (uint256 profit, uint256 loss) = strategy.report();
-        console.log("profit: ", profit / DEC);
-        console.log("loss: ", loss / DEC);
-
-
-
-        console.log("strategy.totalAssets() after deposit: ", strategy.totalAssets() / DEC);
-        console.log("strategy.totalDebt() after deposit: ", strategy.totalDebt() / DEC);
-        console.log("strategy.totalIdle() after deposit: ", strategy.totalIdle() / DEC);
-        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
-        console.log("balanceUpdatedDSR: ", strategy.balanceUpdatedDSR() / DEC);
-        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
-        console.log("pot.pie(): ", pot.pie(address(strategy)) / DEC);
-        console.log("daiBalance: ", asset.balanceOf(address(strategy)) / DEC);
-        console.log("assetBalance: ", strategy.balanceAsset() / DEC);
-        console.log("asset.balanceOf(user): ", asset.balanceOf(user) / DEC);
-
-
-
-        // Withdraw all funds
-        vm.prank(user);
-        strategy.redeem(_amount, user, user);
-
-        console.log("strategy.totalAssets() after deposit: ", strategy.totalAssets() / DEC);
-        console.log("strategy.totalDebt() after deposit: ", strategy.totalDebt() / DEC);
-        console.log("strategy.totalIdle() after deposit: ", strategy.totalIdle() / DEC);
-        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
-        console.log("balanceUpdatedDSR: ", strategy.balanceUpdatedDSR() / DEC);
-        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
-        console.log("pot.pie(): ", pot.pie(address(strategy)) / DEC);
-        console.log("daiBalance: ", asset.balanceOf(address(strategy)) / DEC);
-        console.log("assetBalance: ", strategy.balanceAsset() / DEC);
-        console.log("asset.balanceOf(user): ", asset.balanceOf(user) / DEC);
 
         skip(strategy.profitMaxUnlockTime());
-*/
 
+        // Withdraw all funds
+        vm.prank(user);
+        strategy.redeem(_amount, user, user);
+        console.log("redeem strategy.totalAssets() after deposit: ", strategy.totalAssets() / DEC);
+        console.log("strategy.totalDebt() after deposit: ", strategy.totalDebt() / DEC);
+        console.log("strategy.totalIdle() after deposit: ", strategy.totalIdle() / DEC);
+        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
+        console.log("balanceUpdatedDSR: ", strategy.balanceUpdatedDSR() / DEC);
+        console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
+        console.log("pot.pie(): ", pot.pie(address(strategy)) / DEC);
+        console.log("daiBalance: ", asset.balanceOf(address(strategy)) / DEC);
+        console.log("assetBalance: ", strategy.balanceAsset() / DEC);
+        console.log("asset.balanceOf(user): ", asset.balanceOf(user) / DEC);
     }
-/*
-    function test_fuzz_operation(uint256 _amount) public {
-        vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
-        // Deposit into strategy
+
+    function test_profitableReport_withMutipleUsers(uint256 _amount, uint16 _divider, uint16 _secondDivider) public {
+        uint256 maxDivider = 100000;
+        vm.assume(_amount > minFuzzAmount * maxDivider && _amount < maxFuzzAmount);
+        // vm.assume(_profit > minFuzzAmount * maxDivider && _profit < maxFuzzAmount);
+        vm.assume(_divider > 0 && _divider < maxDivider);
+        vm.assume(_secondDivider > 0 && _secondDivider < maxDivider);
+
+        // profit must be below 100%
+        uint256 _profit = _amount / 10;
+        address secondUser = address(22);
+        address thirdUser = address(33);
+        uint256 secondUserAmount = _amount / _divider;
+        uint256 thirdUserAmount = _amount / _secondDivider;
+
         mintAndDepositIntoStrategy(strategy, user, _amount);
-        checkStrategyTotals(strategy, _amount, _amount, 0);
+        mintAndDepositIntoStrategy(strategy, secondUser, secondUserAmount);
+        mintAndDepositIntoStrategy(strategy, thirdUser, thirdUserAmount);
+
+        // DONE: Implement logic so totalDebt is _amount and totalIdle = 0.
+        uint256 strategyTotal = _amount + secondUserAmount + thirdUserAmount;
+        checkStrategyTotals(strategy, strategyTotal, strategyTotal, 0);
+
+        // Earn Interest
+        skip(1 days);
+        // drop some addtional profit
+        airdrop(asset, address(strategy), _profit);
+
+        // DONE: implement logic to simulate earning interest.
+        skip(30 days);
+
+        // Report profit
+        vm.prank(keeper);
+        (uint256 profit, uint256 loss) = strategy.report();
+
+        // Check return Values
+        assertGe(profit, _profit, "!profit"); // profit should be at least airdrop amount
+        assertEq(loss, 0, "!loss");
+
+        skip(strategy.profitMaxUnlockTime());
+
+        //withdraw part of the funds
+        vm.prank(user);
+        strategy.redeem(_amount / 8, user, user);
+        vm.prank(secondUser);
+        strategy.redeem(secondUserAmount / 6, secondUser, secondUser);
+        vm.prank(thirdUser);
+        strategy.redeem(thirdUserAmount / 4, thirdUser, thirdUser);
+
+        // Skip some time, this will earn some profit in aave
+        skip(3 days);
+
+        // Report profit
+        vm.prank(keeper);
+        (profit, loss) = strategy.report();
+
+        // Check return Values
+        assertGe(profit, 0, "!profit"); // no airdrop so profit can be mininmal
+        assertEq(loss, 0, "!loss");
+
+        skip(strategy.profitMaxUnlockTime());
+
+        // withdraw all funds
+        console.log("user shares: ", strategy.balanceOf(user));
+        console.log("user2 shares: ", strategy.balanceOf(secondUser));
+        console.log("user3 shares: ", strategy.balanceOf(thirdUser));
+        uint redeemAmount = strategy.balanceOf(user);
+        vm.prank(user);
+        strategy.redeem(redeemAmount, user, user);
+        redeemAmount = strategy.balanceOf(secondUser);
+        vm.prank(secondUser);
+        strategy.redeem(redeemAmount, secondUser, secondUser);
+        redeemAmount = strategy.balanceOf(thirdUser);
+        vm.prank(thirdUser);
+        strategy.redeem(redeemAmount, thirdUser, thirdUser);
+        // verify users earned profit
+        assertGt(asset.balanceOf(user), _amount, "!final balance");
+        assertGt(asset.balanceOf(secondUser), secondUserAmount, "!final balance");
+        assertGt(asset.balanceOf(thirdUser), thirdUserAmount, "!final balance");
+
+        // verify vault is empty
+        checkStrategyTotals(strategy, 0, 0, 0);
     }
-*/
+    
 }
+
 
 
 interface PotLike {

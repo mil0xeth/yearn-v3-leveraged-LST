@@ -183,4 +183,34 @@ contract OperationTest is Setup {
 
         assertTrue(!strategy.tendTrigger());
     }
+
+
+    function test_emergencyWithdrawAll(uint256 _amount) public {
+        vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
+
+        // Deposit into strategy
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+
+        // Skip some time
+        skip(15 days);
+
+        vm.prank(management);
+        strategy.emergencyWithdrawAll();
+        assertGe(asset.balanceOf(address(strategy)), _amount, "!all in asset");
+
+        vm.prank(keeper);
+        (uint profit, uint loss) = strategy.report();
+        assertEq(loss, 0, "!loss");
+
+        // Unlock Profits
+        skip(strategy.profitMaxUnlockTime());
+
+        vm.prank(user);
+        strategy.redeem(_amount, user, user);
+        // verify users earned profit
+        assertGt(asset.balanceOf(user), _amount, "!final balance");
+
+        checkStrategyTotals(strategy, 0, 0, 0);
+    }
+    
 }

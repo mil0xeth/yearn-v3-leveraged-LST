@@ -26,4 +26,5 @@ interface IStrategyInterface is IStrategy, IUniswapV3Swapper {
     function balanceAsset() external view returns (uint256);
     function balanceDSR() external view returns (uint256);
     function balanceUpdatedDSR() external returns (uint256);
+    function emergencyWithdrawAll() external;
 }
