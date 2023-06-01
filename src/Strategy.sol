@@ -25,7 +25,8 @@ contract Strategy is BaseTokenizedStrategy {
         require(ERC20(_asset).allowance(address(this), address(daiJoin)) == 0, "already initialized");
         //approvals:
         ERC20(_asset).safeApprove(address(daiJoin), type(uint256).max);
-
+        
+        //approve Maker internal accounting moves of DAI
         VatLike vat = VatLike(pot.vat());
         vat.hope(address(daiJoin));
         vat.hope(address(pot));

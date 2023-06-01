@@ -146,7 +146,7 @@ contract MainTest is Setup {
         vm.prank(thirdUser);
         strategy.redeem(thirdUserAmount / 4, thirdUser, thirdUser);
 
-        // Skip some time, this will earn some profit in aave
+        // Skip some time, this will earn some profit
         skip(3 days);
 
         // Report profit
