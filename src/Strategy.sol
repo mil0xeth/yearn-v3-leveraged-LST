@@ -18,10 +18,6 @@ contract Strategy is BaseTokenizedStrategy {
     DaiJoinLike internal constant daiJoin = DaiJoinLike(0x9759A6Ac90977b93B58547b4A71c78317f391A28);
 
     constructor(address _asset, string memory _name) BaseTokenizedStrategy(_asset, _name) {
-        initializeStrategy(_asset);
-    }
-
-    function initializeStrategy(address _asset) public {
         require(ERC20(_asset).allowance(address(this), address(daiJoin)) == 0, "already initialized");
         //approvals:
         ERC20(_asset).safeApprove(address(daiJoin), type(uint256).max);
@@ -36,7 +32,7 @@ contract Strategy is BaseTokenizedStrategy {
                 INTERNAL
     //////////////////////////////////////////////////////////////*/
 
-    function _invest(uint256 _amount) internal override {
+    function _deployFunds(uint256 _amount) internal override {
         _join(_amount);
     }
 
@@ -56,16 +52,6 @@ contract Strategy is BaseTokenizedStrategy {
         uint256 pie = _rdiv(wad, chi);
         daiJoin.join(address(this), wad);
         pot.join(pie);
-    }
-
-    function _rmul(uint256 x, uint256 y) internal pure returns (uint256 z) {
-        // always rounds down
-        z = x * y / RAY;
-    }
-
-    function _rdiv(uint256 x, uint256 y) internal pure returns (uint256 z) {
-        // always rounds down
-        z = x * RAY / y;
     }
 
     function _freeFunds(uint256 _amount) internal override {
@@ -92,19 +78,14 @@ contract Strategy is BaseTokenizedStrategy {
         daiJoin.exit(address(this), amt);
     }
     
-    function _rdivup(uint256 x, uint256 y) internal pure returns (uint256 z) {
-        // always rounds up
-        z = ( x * RAY + (y - 1) ) / y;
-    }
-
-    function _totalInvested() internal override returns (uint256 _invested) {
+    function _harvestAndReport() internal override returns (uint256 _totalAssets) {
         // deposit any loose DAI funds in the strategy
         uint256 looseAsset = _balanceAsset();
         if (looseAsset > 0 && !TokenizedStrategy.isShutdown()) {
             _join(looseAsset);
         }
         //total assets of the strategy:
-        _invested = _balanceAsset() + _balanceUpdatedDSR();
+        _totalAssets = _balanceAsset() + _balanceUpdatedDSR();
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -125,6 +106,21 @@ contract Strategy is BaseTokenizedStrategy {
         //rho: the last time that drip is called
         uint256 chi = (block.timestamp > pot.rho()) ? pot.drip() : pot.chi();
         return _rmul(chi, pot.pie(address(this)));
+    }
+
+    function _rmul(uint256 x, uint256 y) internal pure returns (uint256 z) {
+        // always rounds down
+        z = x * y / RAY;
+    }
+
+    function _rdiv(uint256 x, uint256 y) internal pure returns (uint256 z) {
+        // always rounds down
+        z = x * RAY / y;
+    }
+
+    function _rdivup(uint256 x, uint256 y) internal pure returns (uint256 z) {
+        // always rounds up
+        z = ( x * RAY + (y - 1) ) / y;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -150,33 +146,9 @@ contract Strategy is BaseTokenizedStrategy {
     //////////////////////////////////////////////////////////////*/
 
     //emergency withdraw DAI amount from DSR into strategy
-    function emergencyWithdraw(uint256 _amount) external onlyManagement {
+    function _emergencyWithdraw(uint256 _amount) internal override {
+        _amount = Math.min(_amount, _balanceUpdatedDSR());
         _exit(_amount);
-    }
-
-    //emergency withdraw all DAI from DSR into strategy
-    function emergencyWithdrawAll() external onlyManagement {
-        _exit(_balanceUpdatedDSR());
-        //Management needs to call afterwards:
-        //shutdownStrategy()
-        //report()
-    }
-
-    function cloneStrategy(
-        address _asset,
-        string memory _name,
-        address _management,
-        address _performanceFeeRecipient,
-        address _keeper
-    ) external returns (address newStrategy) {
-        newStrategy = TokenizedStrategy.clone(
-            _asset,
-            _name,
-            _management,
-            _performanceFeeRecipient,
-            _keeper
-        );
-        Strategy(payable(newStrategy)).initializeStrategy(_asset);
     }
 }
 

@@ -24,7 +24,7 @@ contract MainTest is Setup {
         // TODO: add additional check on strat params
     }
 
-    function test_operation() public {
+    function test_main() public {
         //init
         uint256 _amount = 1000e18; //1000 DAI
         uint256 DEC = 1e18; //asset 1e18 for 18 decimals
@@ -98,7 +98,8 @@ contract MainTest is Setup {
         console.log("asset.balanceOf(user): ", asset.balanceOf(user) / DEC);
     }
 
-    function test_profitableReport_withMutipleUsers(uint256 _amount, uint16 _divider, uint16 _secondDivider) public {
+    function test_main_profitableReport_withMutipleUsers(uint256 _amount, uint16 _divider, uint16 _secondDivider) public {
+        setPerformanceFeeToZero(address(strategy));
         uint256 maxDivider = 100000;
         vm.assume(_amount > minFuzzAmount * maxDivider && _amount < maxFuzzAmount);
         // vm.assume(_profit > minFuzzAmount * maxDivider && _profit < maxFuzzAmount);

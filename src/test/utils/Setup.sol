@@ -9,13 +9,19 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Strategy} from "../../Strategy.sol";
 import {IStrategyInterface} from "../../interfaces/IStrategyInterface.sol";
 
-interface IFactory {
-    function owner() external view returns (address);
+// Inherit the events so they can be checked if desired.
+import {IEvents} from "@tokenized-strategy/interfaces/IEvents.sol"; 
+import {TokenizedStrategy} from "@tokenized-strategy/TokenizedStrategy.sol";
 
-    function setFee(uint16) external;
+interface IFactory {
+    function governance() external view returns (address);
+
+    function set_protocol_fee_bps(uint16) external;
+
+    function set_protocol_fee_recipient(address) external;
 }
 
-contract Setup is ExtendedTest {
+contract Setup is ExtendedTest, IEvents {
     // Contract instancees that we will use repeatedly.
     ERC20 public asset;
     IStrategyInterface public strategy;
@@ -32,7 +38,7 @@ contract Setup is ExtendedTest {
     address public performanceFeeRecipient = address(3);
 
     // Address of the real deployed Factory
-    address public factory = 0xa8f46C3f5A89fbC3c80B3EE333a1dAF8FA719061;
+    address public factory = 0x85E2861b3b1a70c90D28DfEc30CE6E07550d83e9;
 
     // Integer variables that will be used repeatedly.
     uint256 public decimals;
@@ -43,6 +49,8 @@ contract Setup is ExtendedTest {
     uint256 public maxFuzzAmount = 1000e6 * 1e18;
     //uint256 public minFuzzAmount = 10_000;
     uint256 public minFuzzAmount = 1e18;
+
+    bytes32 public constant BASE_STRATEGY_STORAGE = bytes32(uint256(keccak256("yearn.base.strategy.storage")) - 1);
 
     // Default prfot max unlock time is set for 10 days
     uint256 public profitMaxUnlockTime = 10 days;
@@ -58,9 +66,6 @@ contract Setup is ExtendedTest {
 
         // Deploy strategy and set variables
         strategy = IStrategyInterface(setUpStrategy());
-
-        // Default for fees to be 0 for easiser calculations.
-        setFees(0, 0);
 
         // label all the used addresses for traces
         vm.label(keeper, "keeper");
@@ -136,10 +141,14 @@ contract Setup is ExtendedTest {
     }
 
     function setFees(uint16 _protocolFee, uint16 _performanceFee) public {
-        address gov = IFactory(factory).owner();
+        address gov = IFactory(factory).governance();
+
+        // Need to make sure there is a protocol fee recipient to set the fee.
+        vm.prank(gov);
+        IFactory(factory).set_protocol_fee_recipient(gov);
 
         vm.prank(gov);
-        IFactory(factory).setFee(_protocolFee);
+        IFactory(factory).set_protocol_fee_bps(_protocolFee);
 
         vm.prank(management);
         strategy.setPerformanceFee(_performanceFee);
@@ -153,5 +162,54 @@ contract Setup is ExtendedTest {
         tokenAddrs["USDT"] = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
         tokenAddrs["DAI"] = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
         tokenAddrs["USDC"] = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    }
+
+
+    // For easier calculations we may want to set the performance fee
+    // to 0 in some tests which is underneath the minimum. So we do it manually.
+    function setPerformanceFeeToZero(address _strategy) public {
+        bytes32 slot;
+        TokenizedStrategy.StrategyData storage S = _strategyStorage();
+
+        assembly {
+            // Perf fee is stored in the 12th slot of the Struct.
+            slot := add(S.slot, 12)
+        }
+
+        // Performance fee is packed in a slot with other variables so we need
+        // to maintain the same variables packed in the slot
+
+        // profitMaxUnlock time is a uint32 at the most significant spot.
+        bytes32 data = bytes4(
+            uint32(IStrategyInterface(_strategy).profitMaxUnlockTime())
+        );
+        // Free up space for the uint16 of performancFee
+        data = data >> 16;
+        // Store 0 in the performance fee spot.
+        data |= bytes2(0);
+        // Shit 160 bits for an address
+        data = data >> 160;
+        // Store the strategies peformance fee recipient
+        data |= bytes20(
+            uint160(IStrategyInterface(_strategy).performanceFeeRecipient())
+        );
+        // Shift the remainder of padding.
+        data = data >> 48;
+
+        // Manually set the storage slot that holds the perfomance fee to 0
+        vm.store(_strategy, slot, data);
+    }
+
+    function _strategyStorage()
+        internal
+        pure
+        returns (TokenizedStrategy.StrategyData storage S)
+    {
+        // Since STORAGE_SLOT is a constant, we have to put a variable
+        // on the stack to access it from an inline assembly block.
+        bytes32 slot = BASE_STRATEGY_STORAGE;
+        assembly {
+            S.slot := slot
+        }
     }
 }
