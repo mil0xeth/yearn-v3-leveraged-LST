@@ -18,7 +18,6 @@ contract Strategy is BaseTokenizedStrategy {
     DaiJoinLike internal constant daiJoin = DaiJoinLike(0x9759A6Ac90977b93B58547b4A71c78317f391A28);
 
     constructor(address _asset, string memory _name) BaseTokenizedStrategy(_asset, _name) {
-        require(ERC20(_asset).allowance(address(this), address(daiJoin)) == 0, "already initialized");
         //approvals:
         ERC20(_asset).safeApprove(address(daiJoin), type(uint256).max);
         
@@ -43,12 +42,11 @@ contract Strategy is BaseTokenizedStrategy {
         //pot: DSR core contract
         //chi: the DSR DAI balance rate accumulator, needs to be updated with .drip()
         //drip(): calculates most recent DAI and DSR shares amount (updates chi)
-        //rho: the last time that drip is called.
         //pie: the strategy's final shares in the DSR (pot) 
         //daiJoin: the DAI ERC20 token system
         //daiJoin.join(): send DAI amount (wad) into Maker internal accounting system
         //pot.join(): claim DAI amount into the DSR as shares
-        uint256 chi = (block.timestamp > pot.rho()) ? pot.drip() : pot.chi();
+        uint256 chi = pot.drip();
         uint256 pie = _rdiv(wad, chi);
         daiJoin.join(address(this), wad);
         pot.join(pie);
@@ -65,12 +63,11 @@ contract Strategy is BaseTokenizedStrategy {
         //pot: DSR core contract
         //chi: the DSR DAI balance rate accumulator, needs to be updated with .drip()
         //drip(): calculates most recent DAI and DSR shares amount (updates chi)
-        //rho: the last time that drip is called
         //pie: the strategy's final shares in the DSR (pot)
         //pot.exit(): redeem shares of DSR into DAI amount in Maker's internal accounting system 
         //daiJoin: the DAI ERC20 token system
         //daiJoin.exit(): retrieve DAI amount (wad) from Maker internal accounting system into the strategy
-        uint256 chi = (block.timestamp > pot.rho()) ? pot.drip() : pot.chi();
+        uint256 chi = pot.drip();
         uint256 pie = _rdivup(wad, chi);
         pie = Math.min(pot.pie(address(this)), pie);
         pot.exit(pie);
@@ -103,8 +100,7 @@ contract Strategy is BaseTokenizedStrategy {
         //Maker vocabulary:
         //pot: DSR core contract
         //chi: the DSR DAI balance rate accumulator, needs to be updated with .drip()
-        //rho: the last time that drip is called
-        uint256 chi = (block.timestamp > pot.rho()) ? pot.drip() : pot.chi();
+        uint256 chi = pot.drip();
         return _rmul(chi, pot.pie(address(this)));
     }
 
@@ -131,14 +127,9 @@ contract Strategy is BaseTokenizedStrategy {
         return _balanceAsset();
     }
 
-    //strategy's DSR balance: always up-to-date
-    function balanceUpdatedDSR() external returns (uint256) {
-        return _balanceUpdatedDSR();
-    }
-
     //strategy's approximate DSR balance, potentially not up-to-date: just for external view checks of approximate total assets of the strategy
     function balanceDSR() external view returns (uint256) {
-        return pot.pie(address(this)) * pot.chi() / RAY;
+        return _rmul(pot.chi(), pot.pie(address(this)));
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -149,6 +140,11 @@ contract Strategy is BaseTokenizedStrategy {
     function _emergencyWithdraw(uint256 _amount) internal override {
         _amount = Math.min(_amount, _balanceUpdatedDSR());
         _exit(_amount);
+    }
+
+    function emergencyWithdrawDirect(uint256 _pieAmount, uint256 _daiJoinAmount) external onlyManagement {
+        pot.exit(_pieAmount);
+        daiJoin.exit(address(this), _daiJoinAmount);
     }
 }
 

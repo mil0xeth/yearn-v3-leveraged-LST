@@ -208,6 +208,7 @@ contract OperationTest is Setup {
 
         vm.prank(keeper);
         (uint profit, uint loss) = strategy.report();
+        assertGt(profit, 0, "!profit");
         assertEq(loss, 0, "!loss");
 
         // Unlock Profits
@@ -241,6 +242,44 @@ contract OperationTest is Setup {
 
         vm.prank(keeper);
         (uint profit, uint loss) = strategy.report();
+        assertGt(profit, 0, "!profit");
+        assertEq(loss, 0, "!loss");
+
+        // Unlock Profits
+        skip(strategy.profitMaxUnlockTime());
+
+        vm.prank(user);
+        strategy.redeem(_amount, user, user);
+        // verify users earned profit
+        assertGt(asset.balanceOf(user), _amount, "!final balance");
+    }
+
+    PotLike internal constant pot = PotLike(0x197E90f9FAD81970bA7976f33CbD77088E5D7cf7);
+
+    function test_emergencyWithdrawDirect(uint256 _amount, uint256 _emergencyWithdrawAmount) public {
+        setPerformanceFeeToZero(address(strategy));
+        vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
+        vm.assume(_emergencyWithdrawAmount > minFuzzAmount && _emergencyWithdrawAmount < maxFuzzAmount);
+
+        // Deposit into strategy
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+
+        // Skip some time
+        skip(15 days);
+
+        vm.prank(management);
+        strategy.shutdownStrategy();
+        vm.prank(management);
+        pot.drip();
+        uint256 pieAmount = pot.pie(address(strategy));
+        uint256 daiJoinAmount = strategy.balanceDSR();
+        vm.prank(management);
+        strategy.emergencyWithdrawDirect(pieAmount, daiJoinAmount);
+        assertGe(asset.balanceOf(address(strategy)), Math.min(_amount, _emergencyWithdrawAmount), "!all in asset");
+
+        vm.prank(keeper);
+        (uint profit, uint loss) = strategy.report();
+        assertGt(profit, 0, "!profit");
         assertEq(loss, 0, "!loss");
 
         // Unlock Profits
@@ -252,4 +291,14 @@ contract OperationTest is Setup {
         assertGt(asset.balanceOf(user), _amount, "!final balance");
     }
     
+}
+
+interface PotLike {
+    function chi() external view returns (uint256);
+    function rho() external view returns (uint256);
+    function drip() external returns (uint256);
+    function join(uint256) external;
+    function exit(uint256) external;
+    function vat() external view returns (address);
+    function pie(address) external view returns (uint256);
 }

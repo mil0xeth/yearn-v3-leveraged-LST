@@ -44,7 +44,6 @@ contract MainTest is Setup {
         console.log("strategy.totalDebt() after deposit: ", strategy.totalDebt() / DEC);
         console.log("strategy.totalIdle() after deposit: ", strategy.totalIdle() / DEC);
         console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
-        console.log("balanceUpdatedDSR: ", strategy.balanceUpdatedDSR() / DEC);
         console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
         console.log("pot.pie(): ", pot.pie(address(strategy)) / DEC);
         console.log("daiBalance: ", asset.balanceOf(address(strategy)) / DEC);
@@ -90,7 +89,6 @@ contract MainTest is Setup {
         console.log("strategy.totalDebt() after deposit: ", strategy.totalDebt() / DEC);
         console.log("strategy.totalIdle() after deposit: ", strategy.totalIdle() / DEC);
         console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
-        console.log("balanceUpdatedDSR: ", strategy.balanceUpdatedDSR() / DEC);
         console.log("balanceDSR(): ", strategy.balanceDSR() / DEC);
         console.log("pot.pie(): ", pot.pie(address(strategy)) / DEC);
         console.log("daiBalance: ", asset.balanceOf(address(strategy)) / DEC);

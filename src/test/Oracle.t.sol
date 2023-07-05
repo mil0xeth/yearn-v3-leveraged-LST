@@ -13,7 +13,7 @@ contract OracleTest is Setup {
         oracle = new StrategyAprOracle();
     }
 
-    function checkOracle(address _strategy, uint256 _delta) public {
+    function checkOracle(address _strategy, uint256) public {
         // Check set up
         // TODO: Add checks for the setup
 
