@@ -9,6 +9,9 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 
 import "./interfaces/maker/IMaker.sol";
 
+/// @title yearn-v3-Maker-DSR
+/// @author mil0x
+/// @notice yearn-v3 Strategy that deposits DAI into Maker's DAI Savings Rate (DSR) vault to receive DAI yield.
 contract Strategy is BaseTokenizedStrategy {
     using SafeERC20 for ERC20;
 
@@ -85,10 +88,6 @@ contract Strategy is BaseTokenizedStrategy {
         _totalAssets = _balanceAsset() + _balanceUpdatedDSR();
     }
 
-    /*//////////////////////////////////////////////////////////////
-                INTERNAL:
-    //////////////////////////////////////////////////////////////*/
-
     function _balanceAsset() internal view returns (uint256) {
         return ERC20(asset).balanceOf(address(this));
     }
@@ -123,11 +122,12 @@ contract Strategy is BaseTokenizedStrategy {
                 EXTERNAL:
     //////////////////////////////////////////////////////////////*/
 
+    /// @notice Returns the amount of asset (DAI) the strategy holds.
     function balanceAsset() external view returns (uint256) {
         return _balanceAsset();
     }
 
-    //strategy's approximate DSR balance, potentially not up-to-date: just for external view checks of approximate total assets of the strategy
+    /// @notice Returns the approximate asset (DAI) balance the strategy owns inside Maker's DSR (potentially not up-to-date: just for external view checks of approximate total assets of the strategy).
     function balanceDSR() external view returns (uint256) {
         return _rmul(pot.chi(), pot.pie(address(this)));
     }
@@ -142,7 +142,11 @@ contract Strategy is BaseTokenizedStrategy {
         _exit(_amount);
     }
 
+    /// @notice If possible, always call emergencyWithdraw() instead of this. This function is to be called only if emergencyWithdraw() were to ever revert: In that case, management needs to first shutdown the strategy, then immediately call a report to record the updates, and then call emergencyWithdrawDirect() with off-chain calculated amounts.
+    /// @param _pieAmount the pie amount (strategy's DSR shares) to exit (redeem) from the pot (DSR core contract) into Maker's accounting system.
+    /// @param _daiJoinAmount the asset (DAI) amount to exit (withdraw) from Maker internal accounting system into the strategy.
     function emergencyWithdrawDirect(uint256 _pieAmount, uint256 _daiJoinAmount) external onlyManagement {
+        require(TokenizedStrategy.isShutdown(), "shutdown the strategy first & report");
         pot.exit(_pieAmount);
         daiJoin.exit(address(this), _daiJoinAmount);
     }
