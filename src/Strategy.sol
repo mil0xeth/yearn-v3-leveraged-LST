@@ -142,13 +142,14 @@ contract Strategy is BaseTokenizedStrategy {
         _exit(_amount);
     }
 
-    /// @notice If possible, always call emergencyWithdraw() instead of this. This function is to be called only if emergencyWithdraw() were to ever revert: In that case, management needs to first shutdown the strategy, then immediately call a report to record the updates, and then call emergencyWithdrawDirect() with off-chain calculated amounts.
+    /// @notice If possible, always call emergencyWithdraw() instead of this. This function is to be called only if emergencyWithdraw() were to ever revert: In that case, management needs to first shutdown the strategy, then call emergencyWithdrawDirect() with off-chain calculated amounts, and then immediately call a report.
     /// @param _pieAmount the pie amount (strategy's DSR shares) to exit (redeem) from the pot (DSR core contract) into Maker's accounting system.
     /// @param _daiJoinAmount the asset (DAI) amount to exit (withdraw) from Maker internal accounting system into the strategy.
     function emergencyWithdrawDirect(uint256 _pieAmount, uint256 _daiJoinAmount) external onlyManagement {
-        require(TokenizedStrategy.isShutdown(), "shutdown the strategy first & report");
+        require(TokenizedStrategy.isShutdown(), "shutdown the strategy first");
         pot.exit(_pieAmount);
         daiJoin.exit(address(this), _daiJoinAmount);
+        //management should call report() right after the emergencyWithdrawDirect function call!
     }
 }
 
