@@ -1,5 +1,6 @@
-# Maker DAI Savings Rate (DSR) Strategy for yearn V3
-Strategy deposits DAI into Maker's DAI Savings Rate (DSR) vault to receive DAI yield.
+# Liquid Staking Token Staker (LST) for yearn V3
+Strategy stakes token into LST, e.g. MATIC into stMATIC and collect yields.
+Supports: stETH, stMatic, MaticX.
 
 This repo uses [Foundry](https://book.getfoundry.sh/) for tests.
 

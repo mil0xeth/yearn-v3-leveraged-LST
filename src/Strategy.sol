@@ -5,161 +5,201 @@ import {BaseTokenizedStrategy} from "@tokenized-strategy/BaseTokenizedStrategy.s
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";1
 
-import "./interfaces/maker/IMaker.sol";
+import "./interfaces/Lido/IWETH.sol";
+import "./interfaces/Lido/ISTETH.sol";
+import "./interfaces/Lido/IWSTETH.sol";
+import {ICurve} from "./interfaces/Curve/Curve.sol";
+import "./interfaces/Chainlink/AggregatorInterface.sol";
 
-/// @title yearn-v3-Maker-DSR
+/// @title yearn-v3-LST-WETH
 /// @author mil0x
-/// @notice yearn-v3 Strategy that deposits DAI into Maker's DAI Savings Rate (DSR) vault to receive DAI yield.
+/// @notice yearn-v3 Strategy that stakes asset into Liquid Staking Token (LST).
 contract Strategy is BaseTokenizedStrategy {
     using SafeERC20 for ERC20;
 
-    uint256 internal constant RAY = 1e27;
+    address public constant LST = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84; //STETH
+    address public constant withdrawalQueueLST = 0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1; //STETH withdrawal queue
+    // Use chainlink oracle to check latest LST/asset price
+    AggregatorInterface public chainlinkOracle = AggregatorInterface(0x86392dc19c0b719886221c78ab11eb8cf5c52812); //STETH/ETH
 
-    PotLike internal constant pot = PotLike(0x197E90f9FAD81970bA7976f33CbD77088E5D7cf7);
-    DaiJoinLike internal constant daiJoin = DaiJoinLike(0x9759A6Ac90977b93B58547b4A71c78317f391A28);
+    address public curve = 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022; //curve_ETH_STETH
+    int128 internal constant ASSETID = 0;
+    int128 internal constant LSTID = 1;
+
+    // Parameters    
+    uint256 public maxSingleTrade; //maximum amount that should be swapped in one go
+    uint256 public swapSlippage; //actual slippage for a trade independent of the depeg; we check with chainlink for additional depeg
+
+    uint256 internal constant WAD = 1e18;
+    uint256 internal constant MAX_BPS = 100_00;
+    address internal constant gov = 0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52; //yearn governance
 
     constructor(address _asset, string memory _name) BaseTokenizedStrategy(_asset, _name) {
         //approvals:
-        ERC20(_asset).safeApprove(address(daiJoin), type(uint256).max);
-        
-        //approve Maker internal accounting moves of DAI
-        VatLike vat = VatLike(pot.vat());
-        vat.hope(address(daiJoin));
-        vat.hope(address(pot));
+        ERC20(_asset).safeApprove(curve, type(uint256).max);
+        ERC20(LST).safeApprove(curve, type(uint256).max);
+
+        maxSingleTrade = 1_000 * 1e18; //maximum amount that should be swapped in one go
+        swapSlippage = 100; //actual slippage for a trade independent of the depeg; we check with chainlink for additional depeg
     }
+
+    receive() external payable {} //able to receive ETH
 
     /*//////////////////////////////////////////////////////////////
                 INTERNAL
     //////////////////////////////////////////////////////////////*/
 
-    function _deployFunds(uint256 _amount) internal override {
-        _join(_amount);
+    function _deployFunds(uint256 _assetAmount) internal override {
+        _stake(_assetAmount);
     }
 
-    function _join(uint256 wad) internal {
-        //summary: strategy invests DAI into Maker's DSR
-        //
-        //Maker vocabulary:
-        //pot: DSR core contract
-        //chi: the DSR DAI balance rate accumulator, needs to be updated with .drip()
-        //drip(): calculates most recent DAI and DSR shares amount (updates chi)
-        //pie: the strategy's final shares in the DSR (pot) 
-        //daiJoin: the DAI ERC20 token system
-        //daiJoin.join(): send DAI amount (wad) into Maker internal accounting system
-        //pot.join(): claim DAI amount into the DSR as shares
-        uint256 chi = pot.drip();
-        uint256 pie = _rdiv(wad, chi);
-        daiJoin.join(address(this), wad);
-        pot.join(pie);
+    function _stake(uint256 _amount) internal {
+        if(_amount == 0){
+            return;
+        }
+        IWETH(asset).withdraw(_amount); //WETH --> ETH
+        if(ICurve(curve).get_dy(ASSETID, LSTID, _amount) < _amount){ //check if we receive more than 1:1 through swaps
+            ISTETH(LST).submit{value: _amount}(gov); //stake 1:1
+        }else{
+            ICurve(curve).exchange{value: _amount}(ASSETID, LSTID, _amount, _amount); //swap for at least 1:1
+        }
     }
 
-    function _freeFunds(uint256 _amount) internal override {
-        _exit(_amount);
+    function availableWithdrawLimit(address /*_owner*/) public view override returns (uint256) {
+        return maxSingleTrade;
     }
 
-    function _exit(uint256 wad) internal {
-        //summary: strategy withdraws DAI from Maker's DSR
-        //
-        //Maker vocabulary:
-        //pot: DSR core contract
-        //chi: the DSR DAI balance rate accumulator, needs to be updated with .drip()
-        //drip(): calculates most recent DAI and DSR shares amount (updates chi)
-        //pie: the strategy's final shares in the DSR (pot)
-        //pot.exit(): redeem shares of DSR into DAI amount in Maker's internal accounting system 
-        //daiJoin: the DAI ERC20 token system
-        //daiJoin.exit(): retrieve DAI amount (wad) from Maker internal accounting system into the strategy
-        uint256 chi = pot.drip();
-        uint256 pie = _rdivup(wad, chi);
-        pie = Math.min(pot.pie(address(this)), pie);
-        pot.exit(pie);
-        uint256 amt = _rmul(chi, pie);
-        daiJoin.exit(address(this), amt);
+    function _freeFunds(uint256 _assetAmount) internal override {
+        //scenario 1: 1000 STETH --> depeg 50% --> no report, totalAssets = 1000 ETH, 10% of all shares redeem --> asks for 100ETH --> thus unstakes 100 STETH --> receives only 50 ETH due to market --> GOOD
+        //scenario 2:                               REPORT, totalAssets = 500 ETH, 10% of all shares redeem --> asks for 50 ETH --> thus NEED 100 STETH --> 
+        //100 ETH --> _unstake(100 ETH)    recordedTotalAssets = 1000 ETH
+        //50 ETH --> _unstake(100 ETH)    recordedTotalAssets = 500 ETH
+        
+        //Unstake LST amount proportional to the shares redeemed:
+        uint256 _LSTamountToUnstake = _balanceLST() * _assetAmount / TokenizedStrategy.totalAssets();
+        _unstake(_LSTamountToUnstake);
     }
-    
+
+    function _unstake(uint256 _amount) internal {
+        uint256 expectedAmountOut = _amount * (MAX_BPS - swapSlippage) / MAX_BPS; //Without oracle we expect 1:1, but can offset that expectation with swapSlippage
+        if (address(chainlinkOracle) != address(0)){ //Check if chainlink oracle is set
+            uint256 LSTprice = uint256(chainlinkOracle.latestAnswer()); //Account for decimals in chainlinkOracle
+            if (LSTprice > 0) {
+                expectedAmountOut = expectedAmountOut * LSTprice / WAD; //adjust expectedAmountOut by actual depeg
+            }
+        }
+        ICurve(curve).exchange(LSTID, ASSETID, _amount, expectedAmountOut);
+        IWETH(asset).deposit{value: address(this).balance}(); //ETH --> WETH
+    }
+
     function _harvestAndReport() internal override returns (uint256 _totalAssets) {
-        // deposit any loose DAI funds in the strategy
+        // deposit any loose balance
+        uint256 balance = address(this).balance;
+        if (balance > 0) {
+            IWETH(asset).deposit{value: balance}();
+        }
+        // deposit any loose asset in the strategy
         uint256 looseAsset = _balanceAsset();
         if (looseAsset > 0 && !TokenizedStrategy.isShutdown()) {
-            _join(looseAsset);
+            _stake(Math.min(maxSingleTrade, looseAsset));
         }
-        //total assets of the strategy:
-        _totalAssets = _balanceAsset() + _balanceUpdatedDSR();
+        // Total assets of the strategy:
+        _totalAssets = _balanceAsset() + _balanceLST() * _getPessimisticLSTprice() / WAD; //use pessimistic price to make sure people cannot withdraw more than the current worth of the LST
+    }
+
+    function _getPessimisticLSTprice() internal view returns (uint256 LSTprice) {
+        LSTprice = curve.get_dy(LSTID, ASSETID, WAD); //price determined through actual swap route
+        if (address(chainlinkOracle) != address(0)){ //Check if chainlink oracle is set
+            uint256 chainlinkPrice = uint256(chainlinkOracle.latestAnswer());
+            if (chainlinkPrice > 0) {
+                LSTprice = Math.min(LSTprice, chainlinkPrice); //use pessimistic price to make sure people cannot withdraw more than the current worth of the LST
+            }
+        }
     }
 
     function _balanceAsset() internal view returns (uint256) {
         return ERC20(asset).balanceOf(address(this));
     }
 
-    //strategy's DSR balance: always up-to-date
-    function _balanceUpdatedDSR() internal returns (uint256) {
-        //summary: check if DSR rate accumulator is up-to-date (& update if not) & get balance of strategy's deposited DAI
-        //
-        //Maker vocabulary:
-        //pot: DSR core contract
-        //chi: the DSR DAI balance rate accumulator, needs to be updated with .drip()
-        uint256 chi = pot.drip();
-        return _rmul(chi, pot.pie(address(this)));
-    }
-
-    function _rmul(uint256 x, uint256 y) internal pure returns (uint256 z) {
-        // always rounds down
-        z = x * y / RAY;
-    }
-
-    function _rdiv(uint256 x, uint256 y) internal pure returns (uint256 z) {
-        // always rounds down
-        z = x * RAY / y;
-    }
-
-    function _rdivup(uint256 x, uint256 y) internal pure returns (uint256 z) {
-        // always rounds up
-        z = ( x * RAY + (y - 1) ) / y;
+    function _balanceLST() internal view returns (uint256){
+        return ERC20(LST).balanceOf(address(this));
     }
 
     /*//////////////////////////////////////////////////////////////
                 EXTERNAL:
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Returns the amount of asset (DAI) the strategy holds.
+    /// @notice Returns the amount of asset the strategy holds.
     function balanceAsset() external view returns (uint256) {
         return _balanceAsset();
     }
+    
+    /// @notice Returns the amount of staked asset in liquid staking token (LST) the strategy holds.
+    function balanceLST() external view returns (uint256) {
+        return _balanceLST();
+    }
 
-    /// @notice Returns the approximate asset (DAI) balance the strategy owns inside Maker's DSR (potentially not up-to-date: just for external view checks of approximate total assets of the strategy).
-    function balanceDSR() external view returns (uint256) {
-        return _rmul(pot.chi(), pot.pie(address(this)));
+    /// @notice Set the maximum amount of asset that can be withdrawn or can be moved by keepers in a single transaction. This is to avoid unnecessarily large slippages and incentivizes staggered withdrawals.
+    function setMaxSingleTrade(uint256 _maxSingleTrade) external onlyManagement {
+        maxSingleTrade = _maxSingleTrade;
+    }
+
+    /// @notice Set the maximum slippage in basis points (BPS) to accept when swapping asset <-> staked asset in liquid staking token (LST).
+    function setSwapSlippage(uint256 _swapSlippage) external onlyManagement {
+        require(_swapSlippage <= MAX_BPS);
+        swapSlippage = _swapSlippage;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                GOVERNANCE:
+    //////////////////////////////////////////////////////////////*/
+
+    modifier onlyGovernance() {
+        require(msg.sender == gov, "!gov");
+        _;
+    }
+
+    /// @notice Set the curve router address in case TVL has migrated to a new curve pool. Only callable by governance.
+    function setCurveRouter(address _curve) external onlyGovernance {
+        require(_curve != address(0));
+        ERC20(_asset).safeApprove(_curve, type(uint256).max);
+        ERC20(LST).safeApprove(_curve, type(uint256).max);
+        curve = _curve;
+    }
+
+    /// @notice Set the chainlink oracle address to a new address. Can be set to address(0) to circumvent chainlink pricing. Only callable by governance.
+    function setChainlinkOracle(address _chainlinkOracle) external onlyGovernance {
+        chainlinkOracle = _chainlinkOracle;
     }
 
     /*//////////////////////////////////////////////////////////////
                 EMERGENCY:
     //////////////////////////////////////////////////////////////*/
 
-    //emergency withdraw DAI amount from DSR into strategy
+    // Emergency withdraw LST amount and swap. Best to do this in steps.
     function _emergencyWithdraw(uint256 _amount) internal override {
-        _amount = Math.min(_amount, _balanceUpdatedDSR());
-        _exit(_amount);
+        _amount = Math.min(_amount, _balanceLST());
+        _unstake(_amount);
     }
 
-    /// @notice If possible, always call emergencyWithdraw() instead of this. This function is to be called only if emergencyWithdraw() were to ever revert: In that case, management needs to first shutdown the strategy, then call emergencyWithdrawDirect() with off-chain calculated amounts, and then immediately call a report.
-    /// @param _pieAmount the pie amount (strategy's DSR shares) to exit (redeem) from the pot (DSR core contract) into Maker's accounting system.
-    /// @param _daiJoinAmount the asset (DAI) amount to exit (withdraw) from Maker internal accounting system into the strategy.
-    function emergencyWithdrawDirect(uint256 _pieAmount, uint256 _daiJoinAmount) external onlyManagement {
-        require(TokenizedStrategy.isShutdown(), "shutdown the strategy first");
-        pot.exit(_pieAmount);
-        daiJoin.exit(address(this), _daiJoinAmount);
-        //management should call report() right after the emergencyWithdrawDirect function call!
+    /// @notice Initiate a liquid staking token (LST) withdrawal process to redeem 1:1. Returns requestIds which can be used to claim asset into the strategy.
+    /// @param _amounts the amounts of LST to initiate a withdrawal process for.
+    function initiateLSTwithdrawal(uint256[] calldata _amounts) external returns (uint256[] memory requestIds) onlyManagement {
+        ERC20(LST).safeApprove(withdrawalQueueLST, type(uint256).max);
+        IQueue(withdrawalQueueLST).requestWithdrawals(_amounts, address(this));
+    }
+
+    /// @notice Claim asset from a liquid staking token (LST) withdrawal process to redeem 1:1. Use the requestId from initiateLSTwithdrawal() as argument.
+    /// @param _requestId return from calling initiateLSTwithdrawal() to identify the withdrawal.
+    function claimLSTwithdrawal(uint256 _requestId) external onlyManagement {
+        IQueue(withdrawalQueueLST).claimWithdrawal(_requestId);
     }
 }
 
-interface PotLike {
-    function chi() external view returns (uint256);
-    function rho() external view returns (uint256);
-    function drip() external returns (uint256);
-    function join(uint256) external;
-    function exit(uint256) external;
-    function vat() external view returns (address);
-    function pie(address) external view returns (uint256);
+interface IQueue {
+    function requestWithdrawals(uint256[] calldata _amounts, address _owner) external returns (uint256[] memory requestIds);
+    function claimWithdrawal(uint256 _requestId) external;
 }
 
