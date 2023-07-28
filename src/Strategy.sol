@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.18;
-
 import {BaseTokenizedStrategy} from "@tokenized-strategy/BaseTokenizedStrategy.sol";
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";1
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "./interfaces/Lido/IWETH.sol";
 import "./interfaces/Lido/ISTETH.sol";
@@ -22,7 +21,7 @@ contract Strategy is BaseTokenizedStrategy {
     address public constant LST = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84; //STETH
     address public constant withdrawalQueueLST = 0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1; //STETH withdrawal queue
     // Use chainlink oracle to check latest LST/asset price
-    AggregatorInterface public chainlinkOracle = AggregatorInterface(0x86392dc19c0b719886221c78ab11eb8cf5c52812); //STETH/ETH
+    AggregatorInterface public chainlinkOracle = AggregatorInterface(0x86392dC19c0b719886221c78AB11eb8Cf5c52812); //STETH/ETH
 
     address public curve = 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022; //curve_ETH_STETH
     int128 internal constant ASSETID = 0;
@@ -42,7 +41,7 @@ contract Strategy is BaseTokenizedStrategy {
         ERC20(LST).safeApprove(curve, type(uint256).max);
 
         maxSingleTrade = 1_000 * 1e18; //maximum amount that should be swapped in one go
-        swapSlippage = 100; //actual slippage for a trade independent of the depeg; we check with chainlink for additional depeg
+        swapSlippage = 200; //actual slippage for a trade independent of the depeg; we check with chainlink for additional depeg
     }
 
     receive() external payable {} //able to receive ETH
@@ -72,14 +71,13 @@ contract Strategy is BaseTokenizedStrategy {
     }
 
     function _freeFunds(uint256 _assetAmount) internal override {
-        //scenario 1: 1000 STETH --> depeg 50% --> no report, totalAssets = 1000 ETH, 10% of all shares redeem --> asks for 100ETH --> thus unstakes 100 STETH --> receives only 50 ETH due to market --> GOOD
-        //scenario 2:                               REPORT, totalAssets = 500 ETH, 10% of all shares redeem --> asks for 50 ETH --> thus NEED 100 STETH --> 
-        //100 ETH --> _unstake(100 ETH)    recordedTotalAssets = 1000 ETH
-        //50 ETH --> _unstake(100 ETH)    recordedTotalAssets = 500 ETH
-        
         //Unstake LST amount proportional to the shares redeemed:
-        uint256 _LSTamountToUnstake = _balanceLST() * _assetAmount / TokenizedStrategy.totalAssets();
-        _unstake(_LSTamountToUnstake);
+        uint256 LSTamountToUnstake = _balanceLST() * _assetAmount / TokenizedStrategy.totalAssets();
+        _unstake(LSTamountToUnstake);
+        uint256 assetBalance = _balanceAsset();
+        if (assetBalance > _assetAmount) { //did we swap too much?
+            _stake(assetBalance - _assetAmount); //in case we swapped too much to satisfy _assetAmount, swap rest back to LST
+        }
     }
 
     function _unstake(uint256 _amount) internal {
@@ -110,7 +108,7 @@ contract Strategy is BaseTokenizedStrategy {
     }
 
     function _getPessimisticLSTprice() internal view returns (uint256 LSTprice) {
-        LSTprice = curve.get_dy(LSTID, ASSETID, WAD); //price determined through actual swap route
+        LSTprice = ICurve(curve).get_dy(LSTID, ASSETID, WAD); //price determined through actual swap route
         if (address(chainlinkOracle) != address(0)){ //Check if chainlink oracle is set
             uint256 chainlinkPrice = uint256(chainlinkOracle.latestAnswer());
             if (chainlinkPrice > 0) {
@@ -164,14 +162,14 @@ contract Strategy is BaseTokenizedStrategy {
     /// @notice Set the curve router address in case TVL has migrated to a new curve pool. Only callable by governance.
     function setCurveRouter(address _curve) external onlyGovernance {
         require(_curve != address(0));
-        ERC20(_asset).safeApprove(_curve, type(uint256).max);
+        ERC20(asset).safeApprove(_curve, type(uint256).max);
         ERC20(LST).safeApprove(_curve, type(uint256).max);
         curve = _curve;
     }
 
     /// @notice Set the chainlink oracle address to a new address. Can be set to address(0) to circumvent chainlink pricing. Only callable by governance.
     function setChainlinkOracle(address _chainlinkOracle) external onlyGovernance {
-        chainlinkOracle = _chainlinkOracle;
+        chainlinkOracle = AggregatorInterface(_chainlinkOracle);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -186,9 +184,9 @@ contract Strategy is BaseTokenizedStrategy {
 
     /// @notice Initiate a liquid staking token (LST) withdrawal process to redeem 1:1. Returns requestIds which can be used to claim asset into the strategy.
     /// @param _amounts the amounts of LST to initiate a withdrawal process for.
-    function initiateLSTwithdrawal(uint256[] calldata _amounts) external returns (uint256[] memory requestIds) onlyManagement {
+    function initiateLSTwithdrawal(uint256[] calldata _amounts) external onlyManagement returns (uint256[] memory requestIds) {
         ERC20(LST).safeApprove(withdrawalQueueLST, type(uint256).max);
-        IQueue(withdrawalQueueLST).requestWithdrawals(_amounts, address(this));
+        requestIds = IQueue(withdrawalQueueLST).requestWithdrawals(_amounts, address(this));
     }
 
     /// @notice Claim asset from a liquid staking token (LST) withdrawal process to redeem 1:1. Use the requestId from initiateLSTwithdrawal() as argument.

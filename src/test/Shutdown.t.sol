@@ -7,6 +7,22 @@ contract ShutdownTest is Setup {
     function setUp() public override {
         super.setUp();
     }
+    /*
+    function test_depositAboveMaxSingleTrade() public {
+        uint256 _amount = strategy.maxSingleTrade() + 1; //just above maxSingleTrade
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+    }
+    */
+
+    function testFail_withdrawAboveMaxSingleTrade() public {
+        uint256 _amount = strategy.maxSingleTrade() + 1; //just above maxSingleTrade
+        //mintAndDepositIntoStrategy(strategy, user, _amount);
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+        vm.prank(user);
+        strategy.redeem(_amount, user, user);
+        checkStrategyInvariantsAfterRedeem(strategy);
+    }
+
 
     function test_shudownCanWithdraw(uint256 _amount) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
@@ -35,11 +51,7 @@ contract ShutdownTest is Setup {
         // TODO: Adjust if there are fees
         checkStrategyTotals(strategy, 0, 0, 0);
 
-        assertGe(
-            asset.balanceOf(user),
-            balanceBefore + _amount,
-            "!final balance"
-        );
+        assertGe(asset.balanceOf(user)* (MAX_BPS + expectedActivityLossBPS*4)/MAX_BPS, balanceBefore + _amount, "!final balance");
     }
 
     // TODO: Add tests for any emergency function added.

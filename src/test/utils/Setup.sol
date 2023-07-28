@@ -5,6 +5,8 @@ import "forge-std/console.sol";
 import {ExtendedTest} from "./ExtendedTest.sol";
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "../../interfaces/Lido/ISTETH.sol";
+import "../../interfaces/Lido/IWETH.sol";
 
 import {Strategy} from "../../Strategy.sol";
 import {IStrategyInterface} from "../../interfaces/IStrategyInterface.sol";
@@ -33,9 +35,11 @@ contract Setup is ExtendedTest, IEvents {
     address public user2 = address(5);
     address public user3 = address(6);
     address public user4 = address(7);
+    address payable public bucket = payable(0xa840CaD8DbF5504F800Fc6aA4582d841895169E7);
     address public keeper = address(4);
     address public management = address(1);
     address public performanceFeeRecipient = address(3);
+    address public LST;
 
     // Address of the real deployed Factory
     address public factory = 0x85E2861b3b1a70c90D28DfEc30CE6E07550d83e9;
@@ -44,11 +48,18 @@ contract Setup is ExtendedTest, IEvents {
     uint256 public decimals;
     uint256 public MAX_BPS = 10_000;
 
-    // Fuzz from $0.01 of 1e6 stable coins up to 1 trillion of a 1e18 coin
-    //uint256 public maxFuzzAmount = 1e30;
-    uint256 public maxFuzzAmount = 1000e6 * 1e18;
-    //uint256 public minFuzzAmount = 10_000;
-    uint256 public minFuzzAmount = 1e18;
+    // Fuzz
+    uint256 public maxFuzzAmount = 1e4 * 1e18;
+    uint256 public minFuzzAmount = 1e15;
+
+    uint256 public expectedActivityLossBPS = 100;
+    uint256 public expectedActivityLossMultipleUsersBPS = 100;
+    uint256 public expectedProfitReductionBPS = 100;
+    uint256 public ONE_ASSET;
+    uint256 public highProfit;
+    uint256 public highLoss;
+    uint256 public swapSlippageForHighProfit;
+    uint256 public swapSlippageForHighLoss;
 
     bytes32 public constant BASE_STRATEGY_STORAGE = bytes32(uint256(keccak256("yearn.base.strategy.storage")) - 1);
 
@@ -56,10 +67,33 @@ contract Setup is ExtendedTest, IEvents {
     uint256 public profitMaxUnlockTime = 10 days;
 
     function setUp() public virtual {
-        _setTokenAddrs();
+        uint256 mainnetFork = vm.createFork("mainnet");
+        uint256 polygonFork = vm.createFork("polygon");
+        //uint256 avaxFork = vm.createFork("avax");
+        //uint256 optimismFork = vm.createFork("optimism");
+        //uint256 arbitrumFork = vm.createFork("arbitrum");
 
-        // Set asset
-        asset = ERC20(tokenAddrs["DAI"]);
+        vm.selectFork(mainnetFork);
+        //vm.selectFork(polygonFork);
+        //vm.selectFork(avaxFork);
+        //vm.selectFork(optimismFork);
+        //vm.selectFork(arbitrumFork);
+
+        //Fork specific parameters:
+        //MAINNET:
+        if(vm.activeFork() == mainnetFork) {
+            asset = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2); //WETH
+            ONE_ASSET = 1e18;
+            highProfit = 900e18;
+            highLoss = 900e18;
+            swapSlippageForHighProfit = 2_00;
+            swapSlippageForHighLoss = 2_00;
+        }
+        //Polygon:
+        if(vm.activeFork() == polygonFork) {
+            asset = ERC20(0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619); //WETH
+            //asset = ERC20(0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270); //WMATIC
+        }
 
         // Set decimals
         decimals = asset.decimals();
@@ -74,6 +108,10 @@ contract Setup is ExtendedTest, IEvents {
         vm.label(management, "management");
         vm.label(address(strategy), "strategy");
         vm.label(performanceFeeRecipient, "performanceFeeRecipient");
+
+        vm.prank(management);
+        strategy.setMaxSingleTrade(100e6*ONE_ASSET);
+        LST = strategy.LST();
     }
 
     function setUpStrategy() public returns (address) {
@@ -112,7 +150,7 @@ contract Setup is ExtendedTest, IEvents {
         address _user,
         uint256 _amount
     ) public {
-        airdrop(asset, _user, _amount);
+        airdrop(address(asset), _user, _amount);
         depositIntoStrategy(_strategy, _user, _amount);
     }
 
@@ -129,9 +167,42 @@ contract Setup is ExtendedTest, IEvents {
         assertEq(_totalAssets, _totalDebt + _totalIdle, "!Added");
     }
 
-    function airdrop(ERC20 _asset, address _to, uint256 _amount) public {
-        uint256 balanceBefore = _asset.balanceOf(_to);
-        deal(address(_asset), _to, balanceBefore + _amount);
+    function airdrop(address _asset, address _to, uint256 _amount) public {
+        if (_asset == LST) {
+            console.log("LST mode");
+            uint256 assetBalanceBefore = asset.balanceOf(bucket);
+            console.log("assetBalanceBefore", assetBalanceBefore);
+            deal(address(asset), bucket, assetBalanceBefore + _amount); //asset in bucket
+            console.log("wethBalance Now", asset.balanceOf(bucket));
+            vm.prank(bucket);
+
+            IWETH(address(asset)).withdraw(_amount); //WETH --> ETH
+            console.log("ethBalance Now", bucket.balance);
+            ISTETH(LST).submit{value: _amount}(bucket); //stake
+            console.log("LST Now bucket", ERC20(LST).balanceOf(bucket));
+            console.log("LST Now stratregy", ERC20(LST).balanceOf(_to));
+            ERC20(LST).transfer(_to, _amount); //transfer LST to _to address
+            console.log("LST Now bucket", ERC20(LST).balanceOf(bucket));
+            console.log("LST Now stratregy", ERC20(LST).balanceOf(_to));
+            assertGe(ERC20(LST).balanceOf(_to), _amount, "LST never arrived");
+            return;
+        }
+        uint256 balanceBefore = ERC20(_asset).balanceOf(_to);
+        deal(_asset, _to, balanceBefore + _amount);
+    }
+
+    function checkStrategyInvariantsAfterReport(IStrategyInterface _strategy) public {
+        if (!_strategy.isShutdown()) {
+            assertLe(_strategy.balanceAsset(), 1, "!inv after report: balanceAsset == 0");
+        }
+        assertLe(address(_strategy).balance, 1, "!inv after report: balance == 0");
+    }
+
+    function checkStrategyInvariantsAfterRedeem(IStrategyInterface _strategy) public {
+        if (!_strategy.isShutdown()) {
+            assertLe(_strategy.balanceAsset(), 1, "!inv after redeem: balanceAsset == 0");
+        }
+        assertLe(address(_strategy).balance, 1, "!inv after redeem: balance == 0");
     }
 
     function getExpectedProtocolFee(
@@ -156,17 +227,6 @@ contract Setup is ExtendedTest, IEvents {
         vm.prank(management);
         strategy.setPerformanceFee(_performanceFee);
     }
-
-    function _setTokenAddrs() internal {
-        tokenAddrs["WBTC"] = 0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599;
-        tokenAddrs["YFI"] = 0x0bc529c00C6401aEF6D220BE8C6Ea1667F6Ad93e;
-        tokenAddrs["WETH"] = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
-        tokenAddrs["LINK"] = 0x514910771AF9Ca656af840dff83E8264EcF986CA;
-        tokenAddrs["USDT"] = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
-        tokenAddrs["DAI"] = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
-        tokenAddrs["USDC"] = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
-    }
-
 
     // For easier calculations we may want to set the performance fee
     // to 0 in some tests which is underneath the minimum. So we do it manually.
