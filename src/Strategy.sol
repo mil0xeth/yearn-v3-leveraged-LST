@@ -6,33 +6,24 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "./interfaces/Lido/IWETH.sol";
-import "./interfaces/Lido/ISTETH.sol";
-import "./interfaces/Lido/IWSTETH.sol";
 import {ICurve} from "./interfaces/Curve/Curve.sol";
-import "./interfaces/Chainlink/AggregatorInterface.sol";
-
-/// @title yearn-v3-LST-WETH
+/// @title yearn-v3-LST-WMATIC
 /// @author mil0x
 /// @notice yearn-v3 Strategy that stakes asset into Liquid Staking Token (LST).
 contract Strategy is BaseTokenizedStrategy {
     using SafeERC20 for ERC20;
-
-    address public constant LST = 0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84; //STETH
-    address public constant withdrawalQueueLST = 0x889edC2eDab5f40e902b864aD4d7AdE8E412F9B1; //STETH withdrawal queue
-    // Use chainlink oracle to check latest LST/asset price
-    AggregatorInterface public chainlinkOracle = AggregatorInterface(0x86392dC19c0b719886221c78AB11eb8Cf5c52812); //STETH/ETH
-
-    address public curve = 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022; //curve_ETH_STETH
-    int128 internal constant ASSETID = 0;
-    int128 internal constant LSTID = 1;
+    address public constant LST = 0x3A58a54C066FdC0f2D55FC9C89F0415C92eBf3C4; //STMATIC
+    address public curve = 0xFb6FE7802bA9290ef8b00CA16Af4Bc26eb663a28; //curve_STMATIC_WMATIC
+    uint256 public ASSETID = 1;
+    uint256 public LSTID = 0;
 
     // Parameters    
     uint256 public maxSingleTrade; //maximum amount that should be swapped in one go
-    uint256 public swapSlippage; //actual slippage for a trade independent of the depeg; we check with chainlink for additional depeg
+    uint256 public swapSlippage; //actual slippage for a trade independent of the depeg; we check with curve oracle for depeg
 
     uint256 internal constant WAD = 1e18;
     uint256 internal constant MAX_BPS = 100_00;
+    uint256 internal constant ASSET_DUST = 100_000_000_000;
     address internal constant gov = 0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52; //yearn governance
 
     constructor(address _asset, string memory _name) BaseTokenizedStrategy(_asset, _name) {
@@ -40,36 +31,55 @@ contract Strategy is BaseTokenizedStrategy {
         ERC20(_asset).safeApprove(curve, type(uint256).max);
         ERC20(LST).safeApprove(curve, type(uint256).max);
 
-        maxSingleTrade = 1_000 * 1e18; //maximum amount that should be swapped in one go
-        swapSlippage = 200; //actual slippage for a trade independent of the depeg; we check with chainlink for additional depeg
+        maxSingleTrade = 100_000 * 1e18; //maximum amount that should be swapped in one go
+        swapSlippage = 8_00; //actual slippage for a trade independent of the depeg; we check with curve oracle for depeg
     }
 
-    receive() external payable {} //able to receive ETH
+    //receive() external payable {} //able to receive ETH
 
     /*//////////////////////////////////////////////////////////////
                 INTERNAL
     //////////////////////////////////////////////////////////////*/
 
-    function _deployFunds(uint256 _assetAmount) internal override {
-        _stake(_assetAmount);
+    function _deployFunds(uint256 _amount) internal override {
+        _stake(_amount);
     }
 
     function _stake(uint256 _amount) internal {
-        if(_amount == 0){
+        if (_amount < ASSET_DUST) {
             return;
         }
-        IWETH(asset).withdraw(_amount); //WETH --> ETH
-        if(ICurve(curve).get_dy(ASSETID, LSTID, _amount) < _amount){ //check if we receive more than 1:1 through swaps
-            ISTETH(LST).submit{value: _amount}(gov); //stake 1:1
-        }else{
-            ICurve(curve).exchange{value: _amount}(ASSETID, LSTID, _amount, _amount); //swap for at least 1:1
+        ICurve(curve).exchange(ASSETID, LSTID, _amount, _assetToLST(_amount) * (MAX_BPS - swapSlippage) / MAX_BPS); //minAmountOut in LST, account for swapping slippage
+    }
+
+    function _assetToLST(uint256 _assetAmount) internal view returns (uint256) {
+        if (ASSETID == 0) {
+            return _zeroToOne(_assetAmount);
+        } else {
+            return _oneToZero(_assetAmount);
         }
+    }
+
+    function _LSTtoAsset(uint256 _LSTamount) internal view returns (uint256) {
+        if (ASSETID == 0) {
+            return _oneToZero(_LSTamount);
+        } else {
+            return _zeroToOne(_LSTamount);
+        }
+    }
+
+    function _zeroToOne(uint256 _zeroAmount) internal view returns (uint256) {
+        return _zeroAmount * WAD / ICurve(curve).price_oracle(); //price_oracle gives One to Zero ratio --> invert
+    }
+
+    function _oneToZero(uint256 _oneAmount) internal view returns (uint256) {
+        return _oneAmount * ICurve(curve).price_oracle() / WAD; //price_oracle gives One to Zero ratio --> direct
     }
 
     function availableWithdrawLimit(address /*_owner*/) public view override returns (uint256) {
         return maxSingleTrade;
     }
-
+    
     function _freeFunds(uint256 _assetAmount) internal override {
         //Unstake LST amount proportional to the shares redeemed:
         uint256 LSTamountToUnstake = _balanceLST() * _assetAmount / TokenizedStrategy.totalAssets();
@@ -81,40 +91,17 @@ contract Strategy is BaseTokenizedStrategy {
     }
 
     function _unstake(uint256 _amount) internal {
-        uint256 expectedAmountOut = _amount * (MAX_BPS - swapSlippage) / MAX_BPS; //Without oracle we expect 1:1, but can offset that expectation with swapSlippage
-        if (address(chainlinkOracle) != address(0)){ //Check if chainlink oracle is set
-            uint256 LSTprice = uint256(chainlinkOracle.latestAnswer()); //Account for decimals in chainlinkOracle
-            if (LSTprice > 0) {
-                expectedAmountOut = expectedAmountOut * LSTprice / WAD; //adjust expectedAmountOut by actual depeg
-            }
-        }
-        ICurve(curve).exchange(LSTID, ASSETID, _amount, expectedAmountOut);
-        IWETH(asset).deposit{value: address(this).balance}(); //ETH --> WETH
+        ICurve(curve).exchange(LSTID, ASSETID, _amount, _LSTtoAsset(_amount) * (MAX_BPS - swapSlippage) / MAX_BPS); //account for swapping slippage
     }
 
     function _harvestAndReport() internal override returns (uint256 _totalAssets) {
-        // deposit any loose balance
-        uint256 balance = address(this).balance;
-        if (balance > 0) {
-            IWETH(asset).deposit{value: balance}();
-        }
         // deposit any loose asset in the strategy
         uint256 looseAsset = _balanceAsset();
         if (looseAsset > 0 && !TokenizedStrategy.isShutdown()) {
             _stake(Math.min(maxSingleTrade, looseAsset));
         }
         // Total assets of the strategy:
-        _totalAssets = _balanceAsset() + _balanceLST() * _getPessimisticLSTprice() / WAD; //use pessimistic price to make sure people cannot withdraw more than the current worth of the LST
-    }
-
-    function _getPessimisticLSTprice() internal view returns (uint256 LSTprice) {
-        LSTprice = ICurve(curve).get_dy(LSTID, ASSETID, WAD); //price determined through actual swap route
-        if (address(chainlinkOracle) != address(0)){ //Check if chainlink oracle is set
-            uint256 chainlinkPrice = uint256(chainlinkOracle.latestAnswer());
-            if (chainlinkPrice > 0) {
-                LSTprice = Math.min(LSTprice, chainlinkPrice); //use pessimistic price to make sure people cannot withdraw more than the current worth of the LST
-            }
-        }
+        _totalAssets = _balanceAsset() + _LSTtoAsset(_balanceLST());
     }
 
     function _balanceAsset() internal view returns (uint256) {
@@ -159,17 +146,14 @@ contract Strategy is BaseTokenizedStrategy {
         _;
     }
 
-    /// @notice Set the curve router address in case TVL has migrated to a new curve pool. Only callable by governance.
-    function setCurveRouter(address _curve) external onlyGovernance {
+    /// @notice Set the curve router address in case TVL has migrated to a new curve pool. Assign ASSETID and LSTID according to their _curve.coins(ID). Only callable by governance.
+    function setCurveRouter(address _curve, uint256 _ASSETID, uint256 _LSTID) external onlyGovernance {
         require(_curve != address(0));
         ERC20(asset).safeApprove(_curve, type(uint256).max);
         ERC20(LST).safeApprove(_curve, type(uint256).max);
         curve = _curve;
-    }
-
-    /// @notice Set the chainlink oracle address to a new address. Can be set to address(0) to circumvent chainlink pricing. Only callable by governance.
-    function setChainlinkOracle(address _chainlinkOracle) external onlyGovernance {
-        chainlinkOracle = AggregatorInterface(_chainlinkOracle);
+        ASSETID = _ASSETID;
+        LSTID = _LSTID;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -181,23 +165,4 @@ contract Strategy is BaseTokenizedStrategy {
         _amount = Math.min(_amount, _balanceLST());
         _unstake(_amount);
     }
-
-    /// @notice Initiate a liquid staking token (LST) withdrawal process to redeem 1:1. Returns requestIds which can be used to claim asset into the strategy.
-    /// @param _amounts the amounts of LST to initiate a withdrawal process for.
-    function initiateLSTwithdrawal(uint256[] calldata _amounts) external onlyManagement returns (uint256[] memory requestIds) {
-        ERC20(LST).safeApprove(withdrawalQueueLST, type(uint256).max);
-        requestIds = IQueue(withdrawalQueueLST).requestWithdrawals(_amounts, address(this));
-    }
-
-    /// @notice Claim asset from a liquid staking token (LST) withdrawal process to redeem 1:1. Use the requestId from initiateLSTwithdrawal() as argument.
-    /// @param _requestId return from calling initiateLSTwithdrawal() to identify the withdrawal.
-    function claimLSTwithdrawal(uint256 _requestId) external onlyManagement {
-        IQueue(withdrawalQueueLST).claimWithdrawal(_requestId);
-    }
 }
-
-interface IQueue {
-    function requestWithdrawals(uint256[] calldata _amounts, address _owner) external returns (uint256[] memory requestIds);
-    function claimWithdrawal(uint256 _requestId) external;
-}
-

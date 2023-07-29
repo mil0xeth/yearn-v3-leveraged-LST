@@ -24,7 +24,7 @@ contract MainTest is Setup {
 
     function test_main() public {
         //init
-        uint256 _amount = 100e18; //1000 DAI
+        uint256 _amount = 100e18;
         uint256 profit;
         uint256 loss;
         console.log("asset: ", asset.symbol());
@@ -39,6 +39,8 @@ contract MainTest is Setup {
         console.log("strategy.totalAssets() after deposit: ", strategy.totalAssets() );
         console.log("strategy.totalDebt() after deposit: ", strategy.totalDebt() );
         console.log("strategy.totalIdle() after deposit: ", strategy.totalIdle() );
+        console.log("strategy.balanceAsset() after deposit", strategy.balanceAsset());
+        console.log("strategy.balanceLST()", strategy.balanceLST());
 
         // Earn Interest
         skip(55 days);
@@ -47,6 +49,8 @@ contract MainTest is Setup {
         (profit, loss) = strategy.report();
         console.log("profit: ", profit );
         console.log("loss: ", loss );
+        console.log("strategy.balanceAsset()", strategy.balanceAsset());
+        console.log("strategy.balanceLST()", strategy.balanceLST());
         skip(10 days);
 
         skip(100 days);
@@ -55,6 +59,8 @@ contract MainTest is Setup {
         (profit, loss) = strategy.report();
         console.log("profit: ", profit );
         console.log("loss: ", loss );
+        console.log("strategy.balanceAsset()", strategy.balanceAsset());
+        console.log("strategy.balanceLST()", strategy.balanceLST());
 
         skip(100 days);
         // Report profit / loss
@@ -75,11 +81,12 @@ contract MainTest is Setup {
         // Withdraw all funds
         vm.prank(user);
         strategy.redeem(_amount, user, user);
-        console.log("redeem strategy.totalAssets() after deposit: ", strategy.totalAssets() );
-        console.log("strategy.totalDebt() after deposit: ", strategy.totalDebt() );
-        console.log("strategy.totalIdle() after deposit: ", strategy.totalIdle() );
-        console.log("daiBalance: ", asset.balanceOf(address(strategy)) );
+        console.log("redeem strategy.totalAssets() after redeem: ", strategy.totalAssets() );
+        console.log("strategy.totalDebt() after redeem: ", strategy.totalDebt() );
+        console.log("strategy.totalIdle() after redeem: ", strategy.totalIdle() );
+        console.log("assetBalance: ", asset.balanceOf(address(strategy)) );
         console.log("assetBalance: ", strategy.balanceAsset() );
+        console.log("strategy.balanceLST()", strategy.balanceLST());
         console.log("asset.balanceOf(user): ", asset.balanceOf(user) );
     }
 }

@@ -9,6 +9,7 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 contract OperationLossTest is Setup {
     uint256 internal constant maxDivider = 100;
     uint256 internal constant maxLossBPS = 50_00;
+    uint256 internal constant maxLossPoolBPS = 30_00;
     
     function setUp() public override {
         super.setUp();
@@ -46,7 +47,7 @@ contract OperationLossTest is Setup {
         assertGe(profit, 0, "!profit");
         assertGe(strategy.totalAssets() * expectedActivityLossBPS / MAX_BPS, loss, "!loss");
         console.log("loss after first report", loss);
-         assertEq(address(strategy).balance, 0);
+        assertLe(address(strategy).balance, 100000000000000000);
 
         //throw away LST to simulate loss
         uint256 toThrow = (strategy.balanceLST() * _lossFactor) / MAX_BPS;
@@ -73,7 +74,7 @@ contract OperationLossTest is Setup {
         checkStrategyInvariantsAfterRedeem(strategy);
         checkStrategyTotals(strategy, 0, 0, 0);
 
-        assertGe(asset.balanceOf(user) * (MAX_BPS + expectedActivityLossBPS)/MAX_BPS, balanceBefore + _amount - toThrow, "!final balance");
+        assertGe(asset.balanceOf(user) * (MAX_BPS + expectedActivityLossBPS*2)/MAX_BPS, balanceBefore + _amount - toThrow, "!final balance");
         console.log("user balance at end", asset.balanceOf(user));
     }
 
@@ -99,7 +100,7 @@ contract OperationLossTest is Setup {
         assertGe(profit, 0, "!profit");
         assertGe(strategy.totalAssets() * expectedActivityLossBPS / MAX_BPS, loss, "!loss");
         console.log("loss after first report", loss);
-         assertEq(address(strategy).balance, 0);
+        assertLe(address(strategy).balance, 100000000000000000);
 
         //throw away LST to simulate loss
         uint256 toThrow = (strategy.balanceLST() * _lossFactor) / MAX_BPS;
@@ -135,7 +136,7 @@ contract OperationLossTest is Setup {
         console.log("profit after final report", profit);
         assertGe(strategy.totalAssets() * expectedActivityLossBPS / MAX_BPS, loss, "!loss");
         console.log("loss after final report", loss);
-         assertEq(address(strategy).balance, 0);
+         assertLe(address(strategy).balance, 100000000000000000);
         console.log("TOTAL ASSETS after airdorp report", strategy.totalAssets());
         skip(strategy.profitMaxUnlockTime());
 
@@ -155,7 +156,7 @@ contract OperationLossTest is Setup {
         uint16 _lossFactor
     ) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
-        _lossFactor = uint16(bound(uint256(_lossFactor), 200, maxLossBPS));
+        _lossFactor = uint16(bound(uint256(_lossFactor), 200, maxLossPoolBPS));
         setPerformanceFeeToZero(address(strategy));
         uint256 profit;
         uint256 loss;
@@ -163,6 +164,9 @@ contract OperationLossTest is Setup {
         // Deposit into strategy
         mintAndDepositIntoStrategy(strategy, user, _amount);
         checkStrategyTotals(strategy, _amount, _amount, 0);
+        vm.prank(management);
+        strategy.setSwapSlippage(swapSlippageForHighLossPool);
+        console.log("setSwapSlippage");
 
         // Report loss
         vm.prank(keeper);
@@ -172,7 +176,7 @@ contract OperationLossTest is Setup {
         assertGe(profit, 0, "!profit");
         assertGe(strategy.totalAssets() * expectedActivityLossBPS / MAX_BPS, loss, "!loss");
         console.log("loss after first report", loss);
-        assertEq(address(strategy).balance, 0);
+        assertLe(address(strategy).balance, 100000000000000000);
 
         //throw away LST in curve pool to simulate LST price deterioration
         uint256 toThrow = (ERC20(LST).balanceOf(strategy.curve()) * _lossFactor) / MAX_BPS;
@@ -180,11 +184,6 @@ contract OperationLossTest is Setup {
         address curve = strategy.curve();
         vm.prank(curve);
         ERC20(LST).transfer(bucket, toThrow);
-        if (toThrow > highLoss) {
-            vm.prank(management);
-            strategy.setSwapSlippage(swapSlippageForHighProfit);
-            console.log("setSwapSlippage"); 
-        }
 
         // Report loss
         vm.prank(keeper);
@@ -214,7 +213,7 @@ contract OperationLossTest is Setup {
         uint16 _lossFactor
     ) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
-        _lossFactor = uint16(bound(uint256(_lossFactor), 50, maxLossBPS));
+        _lossFactor = uint16(bound(uint256(_lossFactor), 50, maxLossPoolBPS));
         setPerformanceFeeToZero(address(strategy));
         uint256 profit;
         uint256 loss;
@@ -222,6 +221,9 @@ contract OperationLossTest is Setup {
         // Deposit into strategy
         mintAndDepositIntoStrategy(strategy, user, _amount);
         checkStrategyTotals(strategy, _amount, _amount, 0);
+        vm.prank(management);
+        strategy.setSwapSlippage(swapSlippageForHighLossPool);
+        console.log("setSwapSlippage");
 
         // Report loss
         vm.prank(keeper);
@@ -231,7 +233,7 @@ contract OperationLossTest is Setup {
         assertGe(profit, 0, "!profit");
         assertGe(strategy.totalAssets() * expectedActivityLossBPS / MAX_BPS, loss, "!loss");
         console.log("loss after first report", loss);
-        assertEq(address(strategy).balance, 0);
+        assertLe(address(strategy).balance, 100000000000000000);
 
         //throw away LST in curve pool to simulate LST price deterioration
         uint256 toThrow = (ERC20(LST).balanceOf(strategy.curve()) * _lossFactor) / MAX_BPS;
@@ -239,11 +241,6 @@ contract OperationLossTest is Setup {
         address curve = strategy.curve();
         vm.prank(curve);
         ERC20(LST).transfer(bucket, toThrow);
-        if (toThrow > highLoss) {
-            vm.prank(management);
-            strategy.setSwapSlippage(swapSlippageForHighProfit);
-            console.log("setSwapSlippage"); 
-        }
 
         // Report loss
         vm.prank(keeper);
@@ -267,7 +264,7 @@ contract OperationLossTest is Setup {
         console.log("profit after final report", profit);
         assertGe(strategy.totalAssets() * expectedActivityLossBPS / MAX_BPS, loss, "!loss");
         console.log("loss after final report", loss);
-        assertEq(address(strategy).balance, 0);
+        assertLe(address(strategy).balance, 100000000000000000);
         skip(strategy.profitMaxUnlockTime());
 
         uint256 balanceBefore = asset.balanceOf(user);

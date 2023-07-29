@@ -50,7 +50,6 @@ contract ShutdownTest is Setup {
 
         // TODO: Adjust if there are fees
         checkStrategyTotals(strategy, 0, 0, 0);
-
         assertGe(asset.balanceOf(user)* (MAX_BPS + expectedActivityLossBPS*4)/MAX_BPS, balanceBefore + _amount, "!final balance");
     }
 
