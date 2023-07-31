@@ -6,36 +6,40 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import {ICurve} from "./interfaces/Curve/Curve.sol";
+import "./interfaces/Chainlink/AggregatorInterface.sol";
+import {IBalancer, IBalancerPool} from "./interfaces/Balancer/IBalancer.sol";
+
 /// @title yearn-v3-LST-WMATIC
 /// @author mil0x
 /// @notice yearn-v3 Strategy that stakes asset into Liquid Staking Token (LST).
 contract Strategy is BaseTokenizedStrategy {
     using SafeERC20 for ERC20;
     address public constant LST = 0x3A58a54C066FdC0f2D55FC9C89F0415C92eBf3C4; //STMATIC
-    address public curve = 0xFb6FE7802bA9290ef8b00CA16Af4Bc26eb663a28; //curve_STMATIC_WMATIC
-    uint256 public ASSETID = 1;
-    uint256 public LSTID = 0;
+    // Use chainlink oracle to check LST price
+    AggregatorInterface public chainlinkOracleAsset = AggregatorInterface(0xAB594600376Ec9fD91F8e885dADF0CE036862dE0); //matic/usd
+    AggregatorInterface public chainlinkOracleLST = AggregatorInterface(0x97371dF4492605486e23Da797fA68e55Fc38a13f); //stmatic/usd
+    address internal constant BALANCER = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
+    address public pool = 0xf0ad209e2e969EAAA8C882aac71f02D8a047d5c2; //stmatic wmatic pool
 
     // Parameters    
     uint256 public maxSingleTrade; //maximum amount that should be swapped in one go
-    uint256 public swapSlippage; //actual slippage for a trade independent of the depeg; we check with curve oracle for depeg
+    uint256 public swapSlippage; //actual slippage for a trade
 
     uint256 internal constant WAD = 1e18;
     uint256 internal constant MAX_BPS = 100_00;
-    uint256 internal constant ASSET_DUST = 100_000_000_000;
-    address internal constant gov = 0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52; //yearn governance
+    uint256 internal constant ASSET_DUST = 100000;
+    address internal constant GOV = 0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52; //yearn governance
 
     constructor(address _asset, string memory _name) BaseTokenizedStrategy(_asset, _name) {
         //approvals:
-        ERC20(_asset).safeApprove(curve, type(uint256).max);
-        ERC20(LST).safeApprove(curve, type(uint256).max);
+        ERC20(_asset).safeApprove(BALANCER, type(uint256).max);
+        ERC20(LST).safeApprove(BALANCER, type(uint256).max);
 
-        maxSingleTrade = 100_000 * 1e18; //maximum amount that should be swapped in one go
-        swapSlippage = 8_00; //actual slippage for a trade independent of the depeg; we check with curve oracle for depeg
+        maxSingleTrade = 1_000_000 * 1e18; //maximum amount that should be swapped in one go
+        swapSlippage = 2_00; //actual slippage for a trade
     }
 
-    //receive() external payable {} //able to receive ETH
+    receive() external payable {}
 
     /*//////////////////////////////////////////////////////////////
                 INTERNAL
@@ -49,35 +53,23 @@ contract Strategy is BaseTokenizedStrategy {
         if (_amount < ASSET_DUST) {
             return;
         }
-        ICurve(curve).exchange(ASSETID, LSTID, _amount, _assetToLST(_amount) * (MAX_BPS - swapSlippage) / MAX_BPS); //minAmountOut in LST, account for swapping slippage
+        swapBalancer(address(asset), LST, _amount, _assetToLST(_amount) * (MAX_BPS - swapSlippage) / MAX_BPS); //minAmountOut in LST, account for swapping slippage
     }
 
     function _assetToLST(uint256 _assetAmount) internal view returns (uint256) {
-        if (ASSETID == 0) {
-            return _zeroToOne(_assetAmount);
-        } else {
-            return _oneToZero(_assetAmount);
-        }
+        uint256 assetPrice = uint256(chainlinkOracleAsset.latestAnswer()) * 1e10; //convert decimals from chainlink to LST
+        uint256 LSTprice = uint256(chainlinkOracleLST.latestAnswer()) * 1e10; //convert decimals from chainlink to LST
+        return _assetAmount * assetPrice / LSTprice;
     }
 
     function _LSTtoAsset(uint256 _LSTamount) internal view returns (uint256) {
-        if (ASSETID == 0) {
-            return _oneToZero(_LSTamount);
-        } else {
-            return _zeroToOne(_LSTamount);
-        }
-    }
-
-    function _zeroToOne(uint256 _zeroAmount) internal view returns (uint256) {
-        return _zeroAmount * WAD / ICurve(curve).price_oracle(); //price_oracle gives One to Zero ratio --> invert
-    }
-
-    function _oneToZero(uint256 _oneAmount) internal view returns (uint256) {
-        return _oneAmount * ICurve(curve).price_oracle() / WAD; //price_oracle gives One to Zero ratio --> direct
+        uint256 assetPrice = uint256(chainlinkOracleAsset.latestAnswer()) * 1e10; //convert decimals from chainlink to LST
+        uint256 LSTprice = uint256(chainlinkOracleLST.latestAnswer()) * 1e10; //convert decimals from chainlink to LST
+        return _LSTamount * LSTprice / assetPrice;
     }
 
     function availableWithdrawLimit(address /*_owner*/) public view override returns (uint256) {
-        return maxSingleTrade;
+        return _balanceAsset() + maxSingleTrade;
     }
     
     function _freeFunds(uint256 _assetAmount) internal override {
@@ -91,13 +83,13 @@ contract Strategy is BaseTokenizedStrategy {
     }
 
     function _unstake(uint256 _amount) internal {
-        ICurve(curve).exchange(LSTID, ASSETID, _amount, _LSTtoAsset(_amount) * (MAX_BPS - swapSlippage) / MAX_BPS); //account for swapping slippage
+        swapBalancer(LST, address(asset), _amount, _LSTtoAsset(_amount) * (MAX_BPS - swapSlippage) / MAX_BPS); //minAmountOut in asset, account for swapping slippage
     }
 
     function _harvestAndReport() internal override returns (uint256 _totalAssets) {
         // deposit any loose asset in the strategy
         uint256 looseAsset = _balanceAsset();
-        if (looseAsset > 0 && !TokenizedStrategy.isShutdown()) {
+        if (looseAsset > ASSET_DUST && !TokenizedStrategy.isShutdown()) {
             _stake(Math.min(maxSingleTrade, looseAsset));
         }
         // Total assets of the strategy:
@@ -137,23 +129,42 @@ contract Strategy is BaseTokenizedStrategy {
         swapSlippage = _swapSlippage;
     }
 
+    function swapBalancer(address _tokenIn, address _tokenOut, uint256 _amount, uint256 _minAmountOut) internal {
+        IBalancer.SingleSwap memory singleSwap;
+        singleSwap.poolId = IBalancerPool(pool).getPoolId();
+        singleSwap.kind = 0;
+        singleSwap.assetIn = _tokenIn;
+        singleSwap.assetOut = _tokenOut;
+        singleSwap.amount = _amount;
+        IBalancer.FundManagement memory funds;
+        funds.sender = address(this);
+        funds.fromInternalBalance = true;
+        funds.recipient = payable(this);
+        funds.toInternalBalance = false;
+        IBalancer(BALANCER).swap(singleSwap, funds, _minAmountOut, block.timestamp);
+    }
+
     /*//////////////////////////////////////////////////////////////
                 GOVERNANCE:
     //////////////////////////////////////////////////////////////*/
 
     modifier onlyGovernance() {
-        require(msg.sender == gov, "!gov");
+        require(msg.sender == GOV, "!gov");
         _;
     }
 
-    /// @notice Set the curve router address in case TVL has migrated to a new curve pool. Assign ASSETID and LSTID according to their _curve.coins(ID). Only callable by governance.
-    function setCurveRouter(address _curve, uint256 _ASSETID, uint256 _LSTID) external onlyGovernance {
-        require(_curve != address(0));
-        ERC20(asset).safeApprove(_curve, type(uint256).max);
-        ERC20(LST).safeApprove(_curve, type(uint256).max);
-        curve = _curve;
-        ASSETID = _ASSETID;
-        LSTID = _LSTID;
+    /// @notice Set the balancer pool address in case TVL has migrated to a new balancer pool. Only callable by governance.
+    function setPool(address _pool) external onlyGovernance {
+        require(_pool != address(0));
+        pool = _pool;
+    }
+
+    /// @notice Set the chainlink oracle address to a new address. Only callable by governance.
+    function setChainlinkOracle(address _chainlinkOracleAsset, address _chainlinkOracleLST) external onlyGovernance {
+        require(_chainlinkOracleAsset != address(0));
+        require(_chainlinkOracleLST != address(0));
+        chainlinkOracleAsset = AggregatorInterface(_chainlinkOracleAsset);
+        chainlinkOracleLST = AggregatorInterface(_chainlinkOracleLST);
     }
 
     /*//////////////////////////////////////////////////////////////

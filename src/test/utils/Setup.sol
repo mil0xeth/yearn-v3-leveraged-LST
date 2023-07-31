@@ -49,12 +49,12 @@ contract Setup is ExtendedTest, IEvents {
     uint256 public MAX_BPS = 10_000;
 
     // Fuzz
-    uint256 public maxFuzzAmount = 10_000 * 1e18; //1e5 * 1e18;
+    uint256 public maxFuzzAmount = 100_000 * 1e18; //1e5 * 1e18;
     uint256 public minFuzzAmount = 1e17;
 
-    uint256 public expectedActivityLossBPS = 1000;
+    uint256 public expectedActivityLossBPS = 500;
     uint256 public expectedActivityLossMultipleUsersBPS = 1000;
-    uint256 public expectedProfitReductionBPS = 1000;
+    uint256 public expectedProfitReductionBPS = 500;
     uint256 public ONE_ASSET;
     uint256 public highProfit;
     uint256 public highLoss;
