@@ -37,7 +37,7 @@ contract OperationLossTest is Setup {
         // Deposit into strategy
         mintAndDepositIntoStrategy(strategy, user, _amount);
 
-        checkStrategyTotals(strategy, _amount, _amount, 0);
+        checkStrategyTotals(strategy, _amount, 0, _amount);
 
         // Report loss
         vm.prank(keeper);
@@ -90,7 +90,7 @@ contract OperationLossTest is Setup {
 
         // Deposit into strategy
         mintAndDepositIntoStrategy(strategy, user, _amount);
-        checkStrategyTotals(strategy, _amount, _amount, 0);
+        checkStrategyTotals(strategy, _amount, 0, _amount);
 
         // Report loss
         vm.prank(keeper);
@@ -163,7 +163,7 @@ contract OperationLossTest is Setup {
 
         // Deposit into strategy
         mintAndDepositIntoStrategy(strategy, user, _amount);
-        checkStrategyTotals(strategy, _amount, _amount, 0);
+        checkStrategyTotals(strategy, _amount, 0, _amount);
         vm.prank(management);
         strategy.setSwapSlippage(swapSlippageForHighLossPool);
         console.log("setSwapSlippage");
@@ -220,7 +220,7 @@ contract OperationLossTest is Setup {
 
         // Deposit into strategy
         mintAndDepositIntoStrategy(strategy, user, _amount);
-        checkStrategyTotals(strategy, _amount, _amount, 0);
+        checkStrategyTotals(strategy, _amount, 0, _amount);
         vm.prank(management);
         strategy.setSwapSlippage(swapSlippageForHighLossPool);
         console.log("setSwapSlippage");

@@ -9,7 +9,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import "./interfaces/Chainlink/AggregatorInterface.sol";
 import {IBalancer, IBalancerPool} from "./interfaces/Balancer/IBalancer.sol";
 
-/// @title yearn-v3-LST-WMATIC
+/// @title yearn-v3-LST-POLYGON-STMATIC
 /// @author mil0x
 /// @notice yearn-v3 Strategy that stakes asset into Liquid Staking Token (LST).
 contract Strategy is BaseTokenizedStrategy {
@@ -18,6 +18,7 @@ contract Strategy is BaseTokenizedStrategy {
     // Use chainlink oracle to check LST price
     AggregatorInterface public chainlinkOracleAsset = AggregatorInterface(0xAB594600376Ec9fD91F8e885dADF0CE036862dE0); //matic/usd
     AggregatorInterface public chainlinkOracleLST = AggregatorInterface(0x97371dF4492605486e23Da797fA68e55Fc38a13f); //stmatic/usd
+    uint256 public chainlinkHeartbeat = 60;
     address internal constant BALANCER = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
     address public pool = 0xf0ad209e2e969EAAA8C882aac71f02D8a047d5c2; //stmatic wmatic pool
 
@@ -28,7 +29,7 @@ contract Strategy is BaseTokenizedStrategy {
     uint256 internal constant WAD = 1e18;
     uint256 internal constant MAX_BPS = 100_00;
     uint256 internal constant ASSET_DUST = 100000;
-    address internal constant GOV = 0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52; //yearn governance
+    address internal constant GOV = 0xC4ad0000E223E398DC329235e6C497Db5470B626; //yearn governance on polygon
 
     constructor(address _asset, string memory _name) BaseTokenizedStrategy(_asset, _name) {
         //approvals:
@@ -45,8 +46,14 @@ contract Strategy is BaseTokenizedStrategy {
                 INTERNAL
     //////////////////////////////////////////////////////////////*/
 
-    function _deployFunds(uint256 _amount) internal override {
-        _stake(_amount);
+    function _deployFunds(uint256 /*_amount*/) internal override {
+        //do nothing, we want to only have the keeper swap funds
+    }
+
+    function _chainlinkPrice(AggregatorInterface _chainlinkOracle) internal view returns (uint256 price) {
+        (, int256 answer, , uint256 updatedAt, ) = _chainlinkOracle.latestRoundData();
+        price = uint256(answer) * 1e10; //convert decimals from chainlink to 1e18
+        require((price > 1 && block.timestamp - updatedAt < chainlinkHeartbeat), "!chainlink");
     }
 
     function _stake(uint256 _amount) internal {
@@ -57,28 +64,26 @@ contract Strategy is BaseTokenizedStrategy {
     }
 
     function _assetToLST(uint256 _assetAmount) internal view returns (uint256) {
-        uint256 assetPrice = uint256(chainlinkOracleAsset.latestAnswer()) * 1e10; //convert decimals from chainlink to LST
-        uint256 LSTprice = uint256(chainlinkOracleLST.latestAnswer()) * 1e10; //convert decimals from chainlink to LST
+        uint256 assetPrice = _chainlinkPrice(chainlinkOracleAsset);
+        uint256 LSTprice = _chainlinkPrice(chainlinkOracleLST);
         return _assetAmount * assetPrice / LSTprice;
     }
 
     function _LSTtoAsset(uint256 _LSTamount) internal view returns (uint256) {
-        uint256 assetPrice = uint256(chainlinkOracleAsset.latestAnswer()) * 1e10; //convert decimals from chainlink to LST
-        uint256 LSTprice = uint256(chainlinkOracleLST.latestAnswer()) * 1e10; //convert decimals from chainlink to LST
+        uint256 assetPrice = _chainlinkPrice(chainlinkOracleAsset);
+        uint256 LSTprice = _chainlinkPrice(chainlinkOracleLST);
         return _LSTamount * LSTprice / assetPrice;
     }
 
     function availableWithdrawLimit(address /*_owner*/) public view override returns (uint256) {
-        return _balanceAsset() + maxSingleTrade;
+        return TokenizedStrategy.totalIdle() + maxSingleTrade;
     }
     
     function _freeFunds(uint256 _assetAmount) internal override {
         //Unstake LST amount proportional to the shares redeemed:
-        uint256 LSTamountToUnstake = _balanceLST() * _assetAmount / TokenizedStrategy.totalAssets();
-        _unstake(LSTamountToUnstake);
-        uint256 assetBalance = _balanceAsset();
-        if (assetBalance > _assetAmount) { //did we swap too much?
-            _stake(assetBalance - _assetAmount); //in case we swapped too much to satisfy _assetAmount, swap rest back to LST
+        uint256 LSTamountToUnstake = _balanceLST() * _assetAmount / TokenizedStrategy.totalDebt();
+        if (LSTamountToUnstake > 2) {
+            _unstake(LSTamountToUnstake);
         }
     }
 
@@ -87,10 +92,9 @@ contract Strategy is BaseTokenizedStrategy {
     }
 
     function _harvestAndReport() internal override returns (uint256 _totalAssets) {
-        // deposit any loose asset in the strategy
-        uint256 looseAsset = _balanceAsset();
-        if (looseAsset > ASSET_DUST && !TokenizedStrategy.isShutdown()) {
-            _stake(Math.min(maxSingleTrade, looseAsset));
+        // invest any loose asset
+        if (!TokenizedStrategy.isShutdown()) {
+            _stake(Math.min(maxSingleTrade, _balanceAsset()));
         }
         // Total assets of the strategy:
         _totalAssets = _balanceAsset() + _LSTtoAsset(_balanceLST());
@@ -127,6 +131,11 @@ contract Strategy is BaseTokenizedStrategy {
     function setSwapSlippage(uint256 _swapSlippage) external onlyManagement {
         require(_swapSlippage <= MAX_BPS);
         swapSlippage = _swapSlippage;
+    }
+
+    /// @notice Set Chainlink heartbeat to determine what qualifies as stale data in units of seconds. 
+    function setChainlinkHeartbeat(uint256 _chainlinkHeartbeat) external onlyManagement {
+        chainlinkHeartbeat = _chainlinkHeartbeat;
     }
 
     function swapBalancer(address _tokenIn, address _tokenOut, uint256 _amount, uint256 _minAmountOut) internal {
@@ -171,7 +180,7 @@ contract Strategy is BaseTokenizedStrategy {
                 EMERGENCY:
     //////////////////////////////////////////////////////////////*/
 
-    // Emergency withdraw LST amount and swap. Best to do this in steps.
+    // Emergency swap LST amount. Best to do this in steps.
     function _emergencyWithdraw(uint256 _amount) internal override {
         _amount = Math.min(_amount, _balanceLST());
         _unstake(_amount);
