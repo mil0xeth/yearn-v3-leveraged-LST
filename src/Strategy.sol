@@ -14,7 +14,7 @@ import {IBalancer, IBalancerPool} from "./interfaces/Balancer/IBalancer.sol";
 /// @notice yearn-v3 Strategy that stakes asset into Liquid Staking Token (LST).
 contract Strategy is BaseTokenizedStrategy {
     using SafeERC20 for ERC20;
-    address public constant LST = 0x3A58a54C066FdC0f2D55FC9C89F0415C92eBf3C4; //STMATIC
+    address internal constant LST = 0x3A58a54C066FdC0f2D55FC9C89F0415C92eBf3C4; //STMATIC
     // Use chainlink oracle to check LST price
     AggregatorInterface public chainlinkOracleAsset = AggregatorInterface(0xAB594600376Ec9fD91F8e885dADF0CE036862dE0); //matic/usd
     AggregatorInterface public chainlinkOracleLST = AggregatorInterface(0x97371dF4492605486e23Da797fA68e55Fc38a13f); //stmatic/usd
@@ -52,7 +52,7 @@ contract Strategy is BaseTokenizedStrategy {
 
     function _chainlinkPrice(AggregatorInterface _chainlinkOracle) internal view returns (uint256 price) {
         (, int256 answer, , uint256 updatedAt, ) = _chainlinkOracle.latestRoundData();
-        price = uint256(answer) * 1e10; //convert decimals from chainlink to 1e18
+        price = uint256(answer);
         require((price > 1 && block.timestamp - updatedAt < chainlinkHeartbeat), "!chainlink");
     }
 
@@ -60,7 +60,7 @@ contract Strategy is BaseTokenizedStrategy {
         if (_amount < ASSET_DUST) {
             return;
         }
-        swapBalancer(address(asset), LST, _amount, _assetToLST(_amount) * (MAX_BPS - swapSlippage) / MAX_BPS); //minAmountOut in LST, account for swapping slippage
+        swapBalancer(asset, LST, _amount, _assetToLST(_amount) * (MAX_BPS - swapSlippage) / MAX_BPS); //minAmountOut in LST, account for swapping slippage
     }
 
     function _assetToLST(uint256 _assetAmount) internal view returns (uint256) {
@@ -88,7 +88,7 @@ contract Strategy is BaseTokenizedStrategy {
     }
 
     function _unstake(uint256 _amount) internal {
-        swapBalancer(LST, address(asset), _amount, _LSTtoAsset(_amount) * (MAX_BPS - swapSlippage) / MAX_BPS); //minAmountOut in asset, account for swapping slippage
+        swapBalancer(LST, asset, _amount, _LSTtoAsset(_amount) * (MAX_BPS - swapSlippage) / MAX_BPS); //minAmountOut in asset, account for swapping slippage
     }
 
     function _harvestAndReport() internal override returns (uint256 _totalAssets) {

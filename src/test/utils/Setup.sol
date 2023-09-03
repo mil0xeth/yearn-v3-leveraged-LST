@@ -93,6 +93,7 @@ contract Setup is ExtendedTest, IEvents {
         //Polygon:
         if(vm.activeFork() == polygonFork) {
             asset = ERC20(0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270); //WMATIC
+            LST = 0x3A58a54C066FdC0f2D55FC9C89F0415C92eBf3C4;
             ONE_ASSET = 1e18;
             highProfit = 50_000e18;
             highLoss = 50_000e18;
@@ -118,7 +119,6 @@ contract Setup is ExtendedTest, IEvents {
         strategy.setMaxSingleTrade(100e6*ONE_ASSET);
         vm.prank(management);
         strategy.setChainlinkHeartbeat(type(uint256).max); //block.timestamp in tests advances with days skipped while the chainlink updatedAt will not, so we need to ignore this in tests. There are additional tests for this specifically in Shutdown.t.sol.
-        LST = strategy.LST();
     }
 
     function setUpStrategy() public returns (address) {
