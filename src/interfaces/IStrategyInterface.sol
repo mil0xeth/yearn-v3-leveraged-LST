@@ -12,6 +12,8 @@ interface IStrategyInterface is IStrategy {
     function maxSingleTrade() external view returns (uint256);
 
     function setSwapSlippage(uint256) external;
+    function setProfitLimitRatio(uint256) external;
+    function setLossLimitRatio(uint256) external;
     function setChainlinkHeartbeat(uint256) external;
     function setMaxSingleTrade(uint256) external;
 }

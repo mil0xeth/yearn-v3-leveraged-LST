@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.18;
 import {BaseTokenizedStrategy} from "@tokenized-strategy/BaseTokenizedStrategy.sol";
+import {BaseHealthCheck} from "@periphery/HealthCheck/BaseHealthCheck.sol";
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
@@ -12,7 +13,7 @@ import {IBalancer, IBalancerPool} from "./interfaces/Balancer/IBalancer.sol";
 /// @title yearn-v3-LST-POLYGON-STMATIC
 /// @author mil0x
 /// @notice yearn-v3 Strategy that stakes asset into Liquid Staking Token (LST).
-contract Strategy is BaseTokenizedStrategy {
+contract Strategy is BaseHealthCheck {
     using SafeERC20 for ERC20;
     address internal constant LST = 0x3A58a54C066FdC0f2D55FC9C89F0415C92eBf3C4; //STMATIC
     // Use chainlink oracle to check LST price
@@ -27,17 +28,18 @@ contract Strategy is BaseTokenizedStrategy {
     uint256 public swapSlippage; //actual slippage for a trade
 
     uint256 internal constant WAD = 1e18;
-    uint256 internal constant MAX_BPS = 100_00;
     uint256 internal constant ASSET_DUST = 100000;
     address internal constant GOV = 0xC4ad0000E223E398DC329235e6C497Db5470B626; //yearn governance on polygon
 
-    constructor(address _asset, string memory _name) BaseTokenizedStrategy(_asset, _name) {
+    constructor(address _asset, string memory _name) BaseHealthCheck(_asset, _name) {
         //approvals:
         ERC20(_asset).safeApprove(BALANCER, type(uint256).max);
         ERC20(LST).safeApprove(BALANCER, type(uint256).max);
 
         maxSingleTrade = 1_000_000 * 1e18; //maximum amount that should be swapped in one go
         swapSlippage = 2_00; //actual slippage for a trade
+
+        _setLossLimitRatio(5_00); // 5% acceptable loss in a report before we revert. Use the external setLossLimitRatio() function to change the value/circumvent this.
     }
 
     receive() external payable {}
@@ -98,6 +100,9 @@ contract Strategy is BaseTokenizedStrategy {
         }
         // Total assets of the strategy:
         _totalAssets = _balanceAsset() + _LSTtoAsset(_balanceLST());
+
+        // Health check the amount to report.
+        _executeHealthCheck(_totalAssets);
     }
 
     function _balanceAsset() internal view returns (uint256) {

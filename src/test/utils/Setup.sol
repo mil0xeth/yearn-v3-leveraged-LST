@@ -119,6 +119,8 @@ contract Setup is ExtendedTest, IEvents {
         strategy.setMaxSingleTrade(100e6*ONE_ASSET);
         vm.prank(management);
         strategy.setChainlinkHeartbeat(type(uint256).max); //block.timestamp in tests advances with days skipped while the chainlink updatedAt will not, so we need to ignore this in tests. There are additional tests for this specifically in Shutdown.t.sol.
+        vm.prank(management);
+        strategy.setProfitLimitRatio(1e18); //we don't want to revert in tests on too high profits from airdrops
     }
 
     function setUpStrategy() public returns (address) {

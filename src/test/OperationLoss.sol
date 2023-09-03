@@ -54,6 +54,9 @@ contract OperationLossTest is Setup {
         console.log("toThrow", toThrow);
         vm.prank(address(strategy));
         ERC20(LST).transfer(bucket, toThrow);
+
+        vm.prank(management);
+        strategy.setLossLimitRatio(_lossFactor + 1_00);
         
         if (toThrow > highLoss) {
             vm.prank(management);
@@ -107,11 +110,14 @@ contract OperationLossTest is Setup {
         console.log("toThrow", toThrow);
         vm.prank(address(strategy));
         ERC20(LST).transfer(bucket, toThrow);
+
+        vm.prank(management);
+        strategy.setLossLimitRatio(_lossFactor + 1_00);
         
         if (toThrow > highLoss) {
             vm.prank(management);
             strategy.setSwapSlippage(swapSlippageForHighProfit);
-            console.log("setSwapSlippage"); 
+            console.log("setSwapSlippage");
         }
 
         // Report loss

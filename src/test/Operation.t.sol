@@ -95,6 +95,8 @@ contract OperationTest is Setup {
             vm.prank(management);
             strategy.setSwapSlippage(swapSlippageForHighProfit);
             console.log("setSwapSlippage"); 
+            vm.prank(management);
+            strategy.setLossLimitRatio(swapSlippageForHighProfit);
         }
 
         // Report profit
@@ -160,6 +162,8 @@ contract OperationTest is Setup {
             vm.prank(management);
             strategy.setSwapSlippage(swapSlippageForHighProfit);
             console.log("setSwapSlippage"); 
+            vm.prank(management);
+            strategy.setLossLimitRatio(swapSlippageForHighProfit);
         }
 
         // Report profit
@@ -235,6 +239,8 @@ contract OperationTest is Setup {
             vm.prank(management);
             strategy.setSwapSlippage(swapSlippageForHighProfit);
             console.log("setSwapSlippage"); 
+            vm.prank(management);
+            strategy.setLossLimitRatio(swapSlippageForHighProfit);
         }
 
         // Report profit
@@ -370,6 +376,8 @@ contract OperationTest is Setup {
             vm.prank(management);
             strategy.setSwapSlippage(swapSlippageForHighProfit);
             console.log("setSwapSlippage"); 
+            vm.prank(management);
+            strategy.setLossLimitRatio(swapSlippageForHighProfit);
         }
 
         // Report profit
@@ -476,6 +484,8 @@ contract OperationTest is Setup {
             vm.prank(management);
             strategy.setSwapSlippage(swapSlippageForHighProfit);
             console.log("setSwapSlippage"); 
+            vm.prank(management);
+            strategy.setLossLimitRatio(swapSlippageForHighProfit);
         }
 
         // Report profit
@@ -561,6 +571,8 @@ contract OperationTest is Setup {
             vm.prank(management);
             strategy.setSwapSlippage(swapSlippageForHighProfit);
             console.log("setSwapSlippage"); 
+            vm.prank(management);
+            strategy.setLossLimitRatio(swapSlippageForHighProfit);
         }
 
         // Report profit
@@ -646,6 +658,8 @@ contract OperationTest is Setup {
             vm.prank(management);
             strategy.setSwapSlippage(swapSlippageForHighProfit);
             console.log("setSwapSlippage"); 
+            vm.prank(management);
+            strategy.setLossLimitRatio(swapSlippageForHighProfit);
         }
 
         // Report profit
