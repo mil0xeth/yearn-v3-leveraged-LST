@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity 0.8.18;
-import {BaseTokenizedStrategy} from "@tokenized-strategy/BaseTokenizedStrategy.sol";
 import {BaseHealthCheck} from "@periphery/HealthCheck/BaseHealthCheck.sol";
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -62,7 +61,7 @@ contract Strategy is BaseHealthCheck {
         if (_amount < ASSET_DUST) {
             return;
         }
-        swapBalancer(asset, LST, _amount, _assetToLST(_amount) * (MAX_BPS - swapSlippage) / MAX_BPS); //minAmountOut in LST, account for swapping slippage
+        swapBalancer(address(asset), LST, _amount, _assetToLST(_amount) * (MAX_BPS - swapSlippage) / MAX_BPS); //minAmountOut in LST, account for swapping slippage
     }
 
     function _assetToLST(uint256 _assetAmount) internal view returns (uint256) {
@@ -90,7 +89,7 @@ contract Strategy is BaseHealthCheck {
     }
 
     function _unstake(uint256 _amount) internal {
-        swapBalancer(LST, asset, _amount, _LSTtoAsset(_amount) * (MAX_BPS - swapSlippage) / MAX_BPS); //minAmountOut in asset, account for swapping slippage
+        swapBalancer(LST, address(asset), _amount, _LSTtoAsset(_amount) * (MAX_BPS - swapSlippage) / MAX_BPS); //minAmountOut in asset, account for swapping slippage
     }
 
     function _harvestAndReport() internal override returns (uint256 _totalAssets) {
@@ -100,9 +99,6 @@ contract Strategy is BaseHealthCheck {
         }
         // Total assets of the strategy:
         _totalAssets = _balanceAsset() + _LSTtoAsset(_balanceLST());
-
-        // Health check the amount to report.
-        _executeHealthCheck(_totalAssets);
     }
 
     function _balanceAsset() internal view returns (uint256) {
