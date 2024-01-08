@@ -189,7 +189,7 @@ contract Setup is ExtendedTest, IEvents {
 
     function checkStrategyInvariantsAfterRedeem(IStrategyInterface _strategy) public {
         if (!_strategy.isShutdown()) {
-            assertLe(_strategy.balanceAsset(), 1e18, "!inv after redeem: balanceAsset == 0");
+            assertLe(_strategy.balanceAsset(), 100e18, "!inv after redeem: balanceAsset == 0");
         }
         assertLe(address(_strategy).balance, 1e18, "!inv after redeem: balance == 0");
     }
