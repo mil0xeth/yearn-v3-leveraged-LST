@@ -51,7 +51,7 @@ contract Strategy is BaseHealthCheck {
         maxTendBasefee = 100e9; //default max tend fee to 100 gwei
         minDepositInterval = 60 * 60 * 6; //default min deposit interval to 6 hours
 
-        _setLossLimitRatio(500); // 0.5% acceptable loss in a report before we revert. Use the external setLossLimitRatio() function to change the value/circumvent this.
+        _setLossLimitRatio(150); // 0.5% acceptable loss in a report before we revert. Use the external setLossLimitRatio() function to change the value/circumvent this.
     }
 
     receive() external payable {}
