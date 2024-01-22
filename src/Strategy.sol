@@ -21,6 +21,7 @@ contract Strategy is BaseHealthCheck {
     uint256 public chainlinkHeartbeat = 60;
     address internal constant BALANCER = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
     address public pool = 0xf0ad209e2e969EAAA8C882aac71f02D8a047d5c2; //stmatic wmatic pool
+    uint256 public swapFeePercentage;
 
     // Parameters    
     uint256 public maxSingleTrade; //maximum amount that should be swapped by the keeper in one go
@@ -50,8 +51,7 @@ contract Strategy is BaseHealthCheck {
         depositTrigger = 1e17; //default the default trigger to half the max trade
         maxTendBasefee = 100e9; //default max tend fee to 100 gwei
         minDepositInterval = 60 * 60 * 6; //default min deposit interval to 6 hours
-
-        _setLossLimitRatio(150); // 0.5% acceptable loss in a report before we revert. Use the external setLossLimitRatio() function to change the value/circumvent this.
+        swapFeePercentage = IBalancerPool(pool).getSwapFeePercentage();
     }
 
     receive() external payable {}
@@ -115,6 +115,10 @@ contract Strategy is BaseHealthCheck {
     }
 
     function availableWithdrawLimit(address /*_owner*/) public view override returns (uint256) {
+        (bool paused, , ) = IBalancerPool(pool).getPausedState();
+        if (paused) {
+            return TokenizedStrategy.totalIdle();
+        }
         return TokenizedStrategy.totalIdle() + maxSingleWithdraw;
     }
     
@@ -136,7 +140,7 @@ contract Strategy is BaseHealthCheck {
             _stake(Math.min(maxSingleTrade, _balanceAsset()));
         }
         // new total assets of the strategy, pessimistically account for LST at a value as if it had been swapped back to asset with the swap fee and a virtual swap slippage
-        _totalAssets = _balanceAsset() + _LSTtoAsset(_balanceLST()) * (WAD - IBalancerPool(pool).getSwapFeePercentage()) * (MAX_BPS - bufferSlippage) / WAD / MAX_BPS;
+        _totalAssets = _balanceAsset() + _LSTtoAsset(_balanceLST()) * (WAD - swapFeePercentage) * (MAX_BPS - bufferSlippage) / WAD / MAX_BPS;
     }
 
     function _balanceAsset() internal view returns (uint256) {
@@ -243,6 +247,7 @@ contract Strategy is BaseHealthCheck {
     function setPool(address _pool) external onlyGovernance {
         require(_pool != address(0));
         pool = _pool;
+        swapFeePercentage = IBalancerPool(_pool).getSwapFeePercentage();
     }
 
     /// @notice Set the chainlink oracle address to a new address. Only callable by governance.
