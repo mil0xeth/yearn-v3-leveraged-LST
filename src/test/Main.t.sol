@@ -24,7 +24,7 @@ contract MainTest is Setup {
 
     function test_main() public {
         //init
-        uint256 _amount = 100e18;
+        uint256 _amount = 50000e18;
         uint256 profit;
         uint256 loss;
         console.log("asset: ", asset.symbol());
@@ -34,7 +34,6 @@ contract MainTest is Setup {
         assertEq(asset.balanceOf(user), _amount, "!totalAssets");
         //user deposit:
         depositIntoStrategy(strategy, user, _amount);
-        assertEq(asset.balanceOf(user), 0, "user balance after deposit =! 0");
         assertEq(strategy.totalAssets(), _amount, "strategy.totalAssets() != _amount after deposit");
         console.log("strategy.totalAssets() after deposit: ", strategy.totalAssets() );
         console.log("strategy.totalDebt() after deposit: ", strategy.totalDebt() );
@@ -42,8 +41,6 @@ contract MainTest is Setup {
         console.log("strategy.balanceAsset() after deposit", strategy.balanceAsset());
         console.log("strategy.balanceLST()", strategy.balanceLST());
 
-        // Earn Interest
-        skip(55 days);
         // Report profit / loss
         vm.prank(keeper);
         (profit, loss) = strategy.report();
@@ -51,32 +48,56 @@ contract MainTest is Setup {
         console.log("loss: ", loss );
         console.log("strategy.balanceAsset()", strategy.balanceAsset());
         console.log("strategy.balanceLST()", strategy.balanceLST());
-        skip(10 days);
-
-        skip(100 days);
-        // Report profit / loss
-        vm.prank(keeper);
-        (profit, loss) = strategy.report();
-        console.log("profit: ", profit );
-        console.log("loss: ", loss );
-        console.log("strategy.balanceAsset()", strategy.balanceAsset());
-        console.log("strategy.balanceLST()", strategy.balanceLST());
-
-        skip(100 days);
-        // Report profit / loss
-        vm.prank(keeper);
-        (profit, loss) = strategy.report();
-        console.log("profit: ", profit );
-        console.log("loss: ", loss );
-
-        skip(100 days);
-        // Report profit / loss
-        vm.prank(keeper);
-        (profit, loss) = strategy.report();
-        console.log("profit: ", profit );
-        console.log("loss: ", loss );
+        console.log("strategy.balanceOfCollateral();", strategy.balanceOfCollateral());
+        console.log("strategy.balanceOfDebt();", strategy.balanceOfDebt());
+        console.log("strategy.currentLoanToValue()", strategy.currentLoanToValue());
 
         skip(strategy.profitMaxUnlockTime());
+
+        //user deposit:
+        airdrop(address(asset), user, _amount);
+        assertEq(asset.balanceOf(user), _amount, "!totalAssets");
+        depositIntoStrategy(strategy, user, _amount);
+        assertEq(asset.balanceOf(user), 0, "user balance after deposit =! 0");
+        console.log("strategy.totalAssets() after deposit: ", strategy.totalAssets() );
+        console.log("strategy.totalDebt() after deposit: ", strategy.totalDebt() );
+        console.log("strategy.totalIdle() after deposit: ", strategy.totalIdle() );
+        console.log("strategy.balanceAsset() after deposit", strategy.balanceAsset());
+        console.log("strategy.balanceLST()", strategy.balanceLST());
+
+        // Report profit / loss
+        vm.prank(keeper);
+        (profit, loss) = strategy.report();
+        console.log("profit: ", profit );
+        console.log("loss: ", loss );
+        console.log("strategy.balanceAsset()", strategy.balanceAsset());
+        console.log("strategy.balanceLST()", strategy.balanceLST());
+        console.log("strategy.balanceOfCollateral();", strategy.balanceOfCollateral());
+        console.log("strategy.balanceOfDebt();", strategy.balanceOfDebt());
+        console.log("strategy.currentLoanToValue()", strategy.currentLoanToValue());
+
+        //skip(strategy.profitMaxUnlockTime());
+
+        console.log("strategy.balanceAsset()", strategy.balanceAsset());
+        console.log("strategy.balanceLST()", strategy.balanceLST());
+        console.log("strategy.balanceOfCollateral();", strategy.balanceOfCollateral());
+        console.log("strategy.balanceOfDebt();", strategy.balanceOfDebt());
+        console.log("strategy.currentLoanToValue()", strategy.currentLoanToValue());
+
+        skip(200 days);
+        console.log("SKIPPED 200 DAYS", strategy.currentLoanToValue());
+        console.log("strategy.currentLoanToValue()", strategy.currentLoanToValue());
+
+        // Report profit / loss
+        vm.prank(keeper);
+        (profit, loss) = strategy.report();
+        console.log("profit: ", profit );
+        console.log("loss: ", loss );
+        console.log("strategy.balanceAsset()", strategy.balanceAsset());
+        console.log("strategy.balanceLST()", strategy.balanceLST());
+        console.log("strategy.balanceOfCollateral();", strategy.balanceOfCollateral());
+        console.log("strategy.balanceOfDebt();", strategy.balanceOfDebt());
+        console.log("strategy.currentLoanToValue()", strategy.currentLoanToValue());
 
         // Withdraw all funds
         vm.prank(user);
@@ -88,5 +109,27 @@ contract MainTest is Setup {
         console.log("assetBalance: ", strategy.balanceAsset() );
         console.log("strategy.balanceLST()", strategy.balanceLST());
         console.log("asset.balanceOf(user): ", asset.balanceOf(user) );
+        console.log("strategy.currentLoanToValue()", strategy.currentLoanToValue());
+
+
+        // Withdraw all funds
+        uint256 sharesRemaining = strategy.balanceOf(user);
+        vm.prank(user);
+        strategy.redeem(sharesRemaining, user, user);
+        console.log("redeem strategy.totalAssets() after redeem: ", strategy.totalAssets() );
+        console.log("strategy.totalDebt() after redeem: ", strategy.totalDebt() );
+        console.log("strategy.totalIdle() after redeem: ", strategy.totalIdle() );
+        console.log("assetBalance: ", asset.balanceOf(address(strategy)) );
+        console.log("assetBalance: ", strategy.balanceAsset() );
+        console.log("strategy.balanceLST()", strategy.balanceLST());
+        console.log("asset.balanceOf(user): ", asset.balanceOf(user) );
+        console.log("strategy.currentLoanToValue()", strategy.currentLoanToValue());
+
+
+        console.log("strategy.balanceAsset()", strategy.balanceAsset());
+        console.log("strategy.balanceLST()", strategy.balanceLST());
+        console.log("strategy.balanceOfCollateral();", strategy.balanceOfCollateral());
+        console.log("strategy.balanceOfDebt();", strategy.balanceOfDebt());
+        console.log("strategy.currentLoanToValue()", strategy.currentLoanToValue());
     }
 }

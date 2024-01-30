@@ -28,7 +28,6 @@ contract ShutdownTest is Setup {
     function test_chainlinkStaleDirectRedeem(uint256 _amount) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
         vm.prank(management);
-        strategy.setChainlinkHeartbeat(0);
         mintAndDepositIntoStrategy(strategy, user, _amount);
         vm.prank(user);
         strategy.redeem(_amount, user, user);
@@ -39,7 +38,6 @@ contract ShutdownTest is Setup {
     function testFail_chainlinkStaleHarvest(uint256 _amount) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
         vm.prank(management);
-        strategy.setChainlinkHeartbeat(0);
         mintAndDepositIntoStrategy(strategy, user, _amount);
         vm.prank(keeper);
         strategy.report();

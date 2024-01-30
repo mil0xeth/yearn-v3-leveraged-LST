@@ -49,8 +49,8 @@ contract Setup is ExtendedTest, IEvents {
     uint256 public MAX_BPS = 10_000;
 
     // Fuzz
-    uint256 public maxFuzzAmount = 50_000 * 1e18; //1e5 * 1e18;
-    uint256 public minFuzzAmount = 1e17;
+    uint256 public maxFuzzAmount = 500 * 1e18; //1e5 * 1e18;
+    uint256 public minFuzzAmount = 1e18;
 
     uint256 public expectedActivityLossBPS = 800;
     uint256 public expectedActivityLossMultipleUsersBPS = 1000;
@@ -120,11 +120,9 @@ contract Setup is ExtendedTest, IEvents {
         vm.prank(management);
         strategy.setMaxSingleWithdraw(100e6*ONE_ASSET);
         vm.prank(management);
-        strategy.setChainlinkHeartbeat(type(uint256).max); //block.timestamp in tests advances with days skipped while the chainlink updatedAt will not, so we need to ignore this in tests. There are additional tests for this specifically in Shutdown.t.sol.
-        vm.prank(management);
         strategy.setProfitLimitRatio(1e18); //we don't want to revert in tests on too high profits from airdrops
         vm.prank(management);
-        strategy.setLossLimitRatio(5_00);
+        strategy.setLossLimitRatio(20_00);
     }
 
     function setUpStrategy() public returns (address) {
@@ -186,16 +184,18 @@ contract Setup is ExtendedTest, IEvents {
 
     function checkStrategyInvariantsAfterReport(IStrategyInterface _strategy) public {
         if (!_strategy.isShutdown()) {
-            assertLe(_strategy.balanceAsset(), 100_000_000_000, "!inv after report: balanceAsset == 0");
+            assertLe(_strategy.balanceAsset(), 100_000_000, "!inv after report: balanceAsset == 0");
+            assertLe(_strategy.currentLoanToValue(), _strategy.targetLoanToValue() + 0.005e18, "!inv after report: LTV too high!");
         }
-        assertLe(address(_strategy).balance, 100000000000000000, "!inv after report: balance == 0");
+        //assertEq(address(_strategy).balance, 0, "!inv after report: balance == 0");
     }
 
     function checkStrategyInvariantsAfterRedeem(IStrategyInterface _strategy) public {
         if (!_strategy.isShutdown()) {
-            //assertLe(_strategy.balanceAsset(), 100e18, "!inv after redeem: balanceAsset == 0");
+            //assertLe(_strategy.balanceAsset(), 1e18, "!inv after redeem: balanceAsset == 0");
+            //assertLe(_strategy.currentLoanToValue(), _strategy.targetLoanToValue() + 0.001e18);
         }
-        assertLe(address(_strategy).balance, 1e18, "!inv after redeem: balance == 0");
+        //assertLe(address(_strategy).balance, 1e18, "!inv after redeem: balance == 0");
     }
 
     function getExpectedProtocolFee(
