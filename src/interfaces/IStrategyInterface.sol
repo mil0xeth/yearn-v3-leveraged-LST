@@ -5,14 +5,17 @@ import {IStrategy} from "@tokenized-strategy/interfaces/IStrategy.sol";
 import {IUniswapV3Swapper} from "@periphery/swappers/interfaces/IUniswapV3Swapper.sol";
 
 interface IStrategyInterface is IStrategy {
-    function balanceAsset() external view returns (uint256);
-    function balanceLST() external view returns (uint256);
+    function balanceOfAsset() external view returns (uint256);
+    function balanceOfLST() external view returns (uint256);
     function balanceOfCollateral() external view returns (uint256);
     function balanceOfDebt() external view returns (uint256);
     function LST() external view returns (address);
     function maxSingleTrade() external view returns (uint256);
     function targetLoanToValue() external view returns (uint256);
+    function windLoanToValue() external view returns (uint256);
+    function unwindLoanToValue() external view returns (uint256);
     function pool() external view returns(address);
+    function getAssetPerLST() external view returns (uint256);
 
     function currentLoanToValue() external view returns (uint256);
 

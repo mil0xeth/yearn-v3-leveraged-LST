@@ -23,8 +23,6 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
     using SafeERC20 for ERC20;
     enum Action {WIND, UNWIND}
     enum Swapper {UNIV3, BALANCER}
-    address internal constant LST = 0x3A58a54C066FdC0f2D55FC9C89F0415C92eBf3C4; //STMATIC
-    uint8 internal immutable EMODE;
 
     //Desired Loan-to-Value
     uint256 public targetLoanToValue;
@@ -32,63 +30,69 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
     uint256 public unwindLoanToValue;
     uint256 public windLoanToValue;
 
-    //AAVEV3 lending pool:
-    IPool private constant lendingPool = IPool(0x794a61358D6845594F94dc1DB02A252b5b4814aD);
-    IProtocolDataProvider private constant protocolDataProvider = IProtocolDataProvider(0x69FA688f1Dc47d4B5d8029D5a35FB7a548310654);
-
-    IPriceOracle private constant priceOracle = IPriceOracle(0xb023e699F5a33916Ea823A16485e259257cA8Bd1);
-
-    // Supply and borrow tokens
-    IAToken public aToken;
-    IVariableDebtToken public debtToken;
-
+    uint256 public depositLimit = type(uint256).max; //Manual limit of total deposits
     uint256 public maxBorrowRate;
 
-    //Expected flashloan fee:
-    uint256 public expectedFlashloanFee;
-
-    address public balancer = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
-    address public pool = 0xf0ad209e2e969EAAA8C882aac71f02D8a047d5c2; //stmatic wmatic pool
-
     // Parameters
-    Swapper swapper;
-    bool public NoFlashloan;
-    uint256 public maxLoops;
-    uint256 public negligibleAmountOfAsset;
-    uint256 public depositTrigger; //amount in asset that will trigger a tend if idle.  
+    Swapper public swapper;
+    address public swapPool;
+    bool public useFlashloan; //use a flashloan to manage CDP (true) or use loops (false)
+    address public flashloanProvider = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
+    uint256 public expectedFlashloanFee;
+    uint256 public maxLoops; //maximum number of loops to use if flashloans are deactivated
+
     uint256 public maxSingleTrade; //maximum amount that should be swapped by the keeper in one go
     uint256 public maxSingleWithdraw; //maximum amount that should be withdrawn in one go
 
     uint256 public swapSlippage; //actual slippage for a trade
     uint256 public bufferSlippage; //pessimistic buffer to the totalAssets to simulate having to realize the LST to asset
-    
-    uint256 public maxTendBasefee; //max amount the base fee can be for a tend to happen.
+    uint256 public depositTrigger; //amount in asset that will trigger a tend if idle.  
     uint256 public minDepositInterval; //minimum time between deposits to wait.
     uint256 public lastDeposit; //timestamp of the last deployment of funds.
     bool public open = true; //bool if the strategy is open for any depositors.
     mapping(address => bool) public allowed; //mapping of addresses allowed to deposit.
 
-    bool internal flashloanActive;
+    uint256 public maxTendBasefee; //max amount the base fee can be for a tend to happen
 
+    bool internal flashloanActive; //security variable to use when calling flashloans
+
+    //Immutables & Constants:
+    uint256 internal immutable ASSET_DUST; //negligible amount of asset, something like 0.1$ to know when to stop loops.
+    address public immutable LST;
+    uint8 internal immutable EMODE;
+    IPool private immutable lendingPool;
+    IProtocolDataProvider private immutable protocolDataProvider;
+    IPriceOracle private immutable priceOracle;
+    IAToken private immutable aToken;
+    IVariableDebtToken private immutable debtToken;
+    address internal immutable GOV;
+
+    address internal constant BALANCER = 0xBA12222222228d8Ba445958a75a0704d566BF2C8;
     uint256 internal constant WAD = 1e18;
-    uint256 internal constant RAY = 1e27;
-    uint256 internal constant ASSET_DUST = 100000;
     uint256 internal constant COLLATERAL_DUST = 10;
     uint256 internal constant DEBT_DUST = 5;
-    uint16 private constant REF = 7; // Yearn's aave referral code
-    address internal constant GOV = 0xC4ad0000E223E398DC329235e6C497Db5470B626; //yearn governance on polygon
+    uint16 private constant REF = 0;
 
-    constructor(address _asset, string memory _name) BaseHealthCheck(_asset, _name) {
-        swapper = Swapper.BALANCER;
-        //swapper = Swapper.UNIV3;
-        NoFlashloan = true;
-        maxLoops = 10;
-
+    constructor(address _asset, uint256 _ASSET_DUST, address _LST, address _protocolDataProvider, Swapper _swapper, address _swapPool, bool _useFlashloan, address _GOV, string memory _name) BaseHealthCheck(_asset, _name) {
+        LST = _LST;
+        swapper = _swapper;
+        swapPool = _swapPool;
+        if (swapper == Swapper.BALANCER) {
+            require(_swapPool != address(0), "swapPool==0");
+        }
+        useFlashloan = _useFlashloan;
+        maxLoops = 30;
+        GOV = _GOV;
+    
         emergencyUnwindLoanToValue = (90_00 * WAD) / 100_00;
         unwindLoanToValue = (81_00 * WAD) / 100_00;
         targetLoanToValue = (80_00 * WAD) / 100_00;
         windLoanToValue = (75_00 * WAD) / 100_00;
-        negligibleAmountOfAsset = 1e17;
+        ASSET_DUST = _ASSET_DUST; //negligible amount of asset, something like 0.1$ to know when to stop loops
+
+        protocolDataProvider = IProtocolDataProvider(_protocolDataProvider);
+        lendingPool = IPool(protocolDataProvider.ADDRESSES_PROVIDER().getPool());
+        priceOracle = IPriceOracle(protocolDataProvider.ADDRESSES_PROVIDER().getPriceOracle());
 
         // 4.4% APR maximum acceptable variable borrow rate from lender:
         maxBorrowRate = 44 * 1e24;
@@ -105,7 +109,7 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
         // Set uni swapper values
         minAmountToSell = 1;
         base = _asset;
-        _setUniFees(_asset, LST, 100);
+        _setUniFees(_asset, LST, 100); //use setUniFees external function to overwrite this default value
         _setUniFees(LST, _asset, 100);
 
         // Set aave tokens
@@ -119,8 +123,8 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
         lendingPool.setUserEMode(EMODE);
 
         //approvals:
-        ERC20(_asset).safeApprove(balancer, type(uint256).max);
-        ERC20(LST).safeApprove(balancer, type(uint256).max);
+        ERC20(_asset).safeApprove(BALANCER, type(uint256).max);
+        ERC20(LST).safeApprove(BALANCER, type(uint256).max);
         ERC20(_asset).safeApprove(address(lendingPool), type(uint256).max);
         ERC20(LST).safeApprove(address(lendingPool), type(uint256).max);
     }
@@ -131,8 +135,8 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
                 INTERNAL
     //////////////////////////////////////////////////////////////*/
 
-    function _deployFunds(uint256 /*_amount*/) internal override {
-        //do nothing, we want to only have the keeper swap funds
+    function _deployFunds(uint256 _amount) internal override {
+        _repayDebt(_amount);
     }
 
     function _tend(uint256 /*_totalIdle*/) internal override {
@@ -140,19 +144,30 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
     }
 
     function _tendTrigger() internal view override returns (bool) {
-        // Nothing to adjust if there is no collateral locked
-        if (balanceOfCollateral() < COLLATERAL_DUST) {
-            return false;
-        }
-
         uint256 _currentLoanToValue = currentLoanToValue();
         // Unwind if we need to repay debt and are outside the tolerance bands, we do it regardless of the call cost
         if (_currentLoanToValue >= emergencyUnwindLoanToValue) {
             return true;
         }
 
-        if (_currentLoanToValue < windLoanToValue && !TokenizedStrategy.isShutdown() && _balanceAsset() > depositTrigger && _balanceAsset() <= _maxDepositableCollateral()  && block.timestamp - lastDeposit > minDepositInterval ) {
-            return block.basefee < maxTendBasefee;
+        if (block.basefee >= maxTendBasefee) {
+            return false;
+        }
+
+        if (_currentLoanToValue >= unwindLoanToValue) {
+            return true;
+        }
+
+        if (TokenizedStrategy.isShutdown()) {
+            return false;
+        }
+        
+        if (_balanceOfAsset() >= depositTrigger && _maxDepositableCollateral() >= depositTrigger && block.timestamp - lastDeposit > minDepositInterval) {
+            return true;
+        }
+
+        if (_currentLoanToValue <= windLoanToValue && balanceOfCollateral() > COLLATERAL_DUST) {
+            return true;
         }
 
         return false;
@@ -172,8 +187,8 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
         }
         uint256 _currentLoanToValue = currentLoanToValue();
         uint256 _targetLoanToValue = targetLoanToValue;
-        if (_currentLoanToValue > unwindLoanToValue) { //check if we need to unwind
-            unwind(0);        
+        if (_currentLoanToValue >= unwindLoanToValue) { //check if we need to unwind
+            unwind(0);
         } else if (!TokenizedStrategy.isShutdown()) {
             (,,,,,,uint256 currentVariableBorrowRate,,,,,) = protocolDataProvider.getReserveData(address(asset)); //1% borrowing APR = 1e25. Percentage value in wad (1e27)
             if (currentVariableBorrowRate <= maxBorrowRate) {
@@ -202,10 +217,10 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
         (, uint256 supplyCap) = protocolDataProvider.getReserveCaps(LST);
         uint256 maximumAmount = supplyCap * WAD;
         uint256 currentAmount = IAToken(aToken).totalSupply();
-        if (currentAmount + negligibleAmountOfAsset >= maximumAmount) {
+        if (currentAmount + ASSET_DUST >= maximumAmount) {
             return 0;
         } else {
-            return maximumAmount - currentAmount - negligibleAmountOfAsset;
+            return maximumAmount - currentAmount - ASSET_DUST;
         }
     }
 
@@ -230,7 +245,7 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
     ) public {
         uint256 assetPerLST = getAssetPerLST();
         uint256 currentDebt = balanceOfDebt();
-        if (NoFlashloan) {
+        if (!useFlashloan) { //No Flashloan:
             uint256 _maxLoops = maxLoops;
             uint256 toSwap = _assetAmountInitial;
             uint256 maxDeposit = _maxDepositableCollateral();
@@ -246,7 +261,7 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
                 collateralBalance += LSTAmountToLock;
                 maxDeposit -= LSTAmountToLock;
                 uint256 targetDebt = collateralBalance * assetPerLST * _targetLoanToValue / WAD / WAD;
-                if (i + 1 < _maxLoops && targetDebt > currentDebt + negligibleAmountOfAsset) {
+                if (i + 1 < _maxLoops && targetDebt > currentDebt + ASSET_DUST) {
                     toSwap = targetDebt - currentDebt;
                     _borrowAsset(toSwap);
                     currentDebt += toSwap;
@@ -272,12 +287,12 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
             uint256 flashloanAmount = targetCollateral * _targetLoanToValue / WAD - currentDebt;
             console.log("flashloanAmount", flashloanAmount);
             //Retrieve upper max limit of flashloan:
-            uint256 flashloanMaximum = asset.balanceOf(address(balancer));
+            uint256 flashloanMaximum = asset.balanceOf(address(flashloanProvider));
             console.log("flashloanMaximum", flashloanMaximum);
             //Cap flashloan only up to maximum allowed:
             flashloanAmount = Math.min(flashloanAmount, flashloanMaximum);
             console.log("flashloanAmount", flashloanAmount);
-            bytes memory data = abi.encode(Action.WIND, _assetAmountInitial, flashloanAmount, 0); 
+            bytes memory data = abi.encode(Action.WIND, _assetAmountInitial); 
             _initFlashLoan(data, flashloanAmount);
         }
         console.log("FINAL COLLATERAL: ", balanceOfCollateral() * assetPerLST / WAD);
@@ -314,7 +329,7 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
         uint256 collateralToSell = currentCollateral - targetCollateral;
         console.log("BEFORE LOOP: collateralToSell", collateralToSell);
 
-        if (NoFlashloan) { //NO FLASHLOAN:
+        if (!useFlashloan) { //No Flashloan:
             uint256 _maxLoops = maxLoops;
             console.log("_maxLoops", _maxLoops);
             
@@ -355,18 +370,6 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
                     debtLeftToRepay -= toRepay;
                 }
                 console.log("debtLeftToRepay", debtLeftToRepay);
-                /*
-                if (debtLeftToRepay > negligibleAmountOfAsset) {
-                    if (toRepay > debtLeftToRepay) {
-                        _repayDebt(debtLeftToRepay);
-                        debtLeftToRepay = 0;
-                    } else {
-                        _repayDebt(toRepay);
-                        debtLeftToRepay -= toRepay;
-                    }
-                    console.log("debtLeftToRepay", debtLeftToRepay);
-                }
-                */
                 if (collateralToSell == 0 || i + 2 > _maxLoops) {
                     return;
                 }
@@ -375,7 +378,7 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
             uint256 flashloanAmount = currentDebt - targetDebt;
             console.log("flashloanAmount", flashloanAmount);
             //Retrieve for upper max limit of flashloan:
-            uint256 flashloanMaximum = asset.balanceOf(address(balancer));
+            uint256 flashloanMaximum = asset.balanceOf(address(flashloanProvider));
             //Cap flashloan only up to maximum allowed:
             if (flashloanMaximum < flashloanAmount) {
                 flashloanAmount = flashloanMaximum;
@@ -383,7 +386,7 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
             }
             console.log("flashloanAmount", flashloanAmount);
             console.log("collateralToSell", collateralToSell);
-            bytes memory data = abi.encode(Action.UNWIND, collateralToSell, flashloanAmount, _percentageOfSharesToRedeem);
+            bytes memory data = abi.encode(Action.UNWIND, collateralToSell);
             //Always flashloan entire debt to pay off entire debt:
             _initFlashLoan(data, flashloanAmount);
         }
@@ -397,7 +400,7 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = amount;
         flashloanActive = true;
-        IBalancer(balancer).flashLoan(address(this), tokens, amounts, data);
+        IBalancer(flashloanProvider).flashLoan(address(this), tokens, amounts, data);
     }
 
     // ----------------- FLASHLOAN CALLBACK -----------------
@@ -408,17 +411,17 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
         uint256[] calldata fees,
         bytes calldata data
     ) external {
-        require(msg.sender == balancer);
+        require(msg.sender == flashloanProvider);
         require(flashloanActive == true);
         flashloanActive = false;
         uint256 fee = fees[0];
         require(fee <= expectedFlashloanFee, "fee > expectedFlashloanFee");
-        (Action action, uint256 _assetAmountInitialOrRequested, uint256 flashloanAmount, uint256 _percentageOfSharesToRedeem) = abi.decode(data, (Action, uint256, uint256, uint256));
+        (Action action, uint256 _assetAmountInitialOrCollateralToSell) = abi.decode(data, (Action, uint256));
         uint256 amount = amounts[0];
         if (action == Action.WIND) {
-            _wind(amount, amount + fee, _assetAmountInitialOrRequested);
+            _wind(amount, amount + fee, _assetAmountInitialOrCollateralToSell);
         } else if (action == Action.UNWIND) {
-            _unwind(amount, amount + fee, _assetAmountInitialOrRequested, _percentageOfSharesToRedeem);
+            _unwind(amount, amount + fee, _assetAmountInitialOrCollateralToSell);
         }
     }
 
@@ -433,10 +436,10 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
         _borrowAsset(flashloanRepayAmount);
         
         //repay flashloan:
-        asset.transfer(address(balancer), flashloanRepayAmount);
+        asset.transfer(address(flashloanProvider), flashloanRepayAmount);
     }
 
-    function _unwind(uint256 flashloanAmount, uint256 flashloanRepayAmount, uint256 collateralToSell, uint256 _percentageOfSharesToRedeem) internal {
+    function _unwind(uint256 flashloanAmount, uint256 flashloanRepayAmount, uint256 collateralToSell) internal {
         console.log("balanceOfDebt()", balanceOfDebt());
         _repayDebt(flashloanAmount);
         console.log("balanceOfDebt()", balanceOfDebt());
@@ -454,7 +457,7 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
         require(assetBalance >= flashloanRepayAmount, "not enough asset to repay flashloan");
         
         //repay flashloan:
-        asset.transfer(address(balancer), flashloanRepayAmount);
+        asset.transfer(address(flashloanProvider), flashloanRepayAmount);
         console.log("balanceOfAsset", balanceOfAsset());
     }
 
@@ -494,10 +497,12 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
     }
 
     // ----------------- PUBLIC BALANCES AND CALCS -----------------
+    /// @notice Returns the amount of asset the strategy holds.
     function balanceOfAsset() public view returns (uint256) {
         return asset.balanceOf(address(this));
     }
 
+    /// @notice Returns the amount of staked asset in liquid staking token (LST) the strategy holds.
     function balanceOfLST() public view returns (uint256) {
         return ERC20(LST).balanceOf(address(this));
     }
@@ -517,7 +522,7 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
     // Current Loan-to-Value of the CDP
     function currentLoanToValue() public view returns (uint256) {
         uint256 totalCollateral = balanceOfCollateral();
-        if (totalCollateral < 10) {
+        if (totalCollateral < COLLATERAL_DUST) {
             return 0;
         }
         return balanceOfDebt() * WAD * WAD / (totalCollateral * getAssetPerLST());
@@ -549,7 +554,7 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
 
     function swapBalancer(address _tokenIn, address _tokenOut, uint256 _amount, uint256 _minAmountOut) internal returns (uint256) {
         IBalancer.SingleSwap memory singleSwap;
-        singleSwap.poolId = IBalancerPool(pool).getPoolId();
+        singleSwap.poolId = IBalancerPool(swapPool).getPoolId();
         singleSwap.kind = 0;
         singleSwap.assetIn = _tokenIn;
         singleSwap.assetOut = _tokenOut;
@@ -559,13 +564,22 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
         funds.fromInternalBalance = true;
         funds.recipient = payable(this);
         funds.toInternalBalance = false;
-        return IBalancer(balancer).swap(singleSwap, funds, _minAmountOut, block.timestamp);
+        return IBalancer(BALANCER).swap(singleSwap, funds, _minAmountOut, block.timestamp);
     }
 
     function availableDepositLimit(address _owner) public view override returns (uint256) {
         // If the owner is whitelisted or the strategy is open.
         if (open || allowed[_owner]) {
-            return type(uint256).max;
+            if (depositLimit == type(uint256).max) {
+                return type(uint256).max;
+            } else {
+                uint256 totalAssets = TokenizedStrategy.totalAssets();
+                if (totalAssets < depositLimit) {
+                    return depositLimit - totalAssets;
+                } else {
+                    return 0;
+                }
+            }
         } else {
             return 0;
         }
@@ -604,7 +618,7 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
         }
         // new total assets of the strategy, pessimistically account for LST at a value as if it had been swapped back to asset with the swap fee and a virtual swap slippage
         console.log("before _totalAssets");
-        uint256 collateralBalance = _balanceAsset() + (_balanceLST() + balanceOfCollateral()) * getAssetPerLST() * (MAX_BPS - bufferSlippage) / WAD / MAX_BPS;
+        uint256 collateralBalance = _balanceOfAsset() + (_balanceOfLST() + balanceOfCollateral()) * getAssetPerLST() * (MAX_BPS - bufferSlippage) / WAD / MAX_BPS;
         uint256 debtBalance = balanceOfDebt();
         if (debtBalance >= collateralBalance) {
             _totalAssets = 0;
@@ -614,11 +628,11 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
         console.log("_totalAssets", _totalAssets);
     }
 
-    function _balanceAsset() internal view returns (uint256) {
+    function _balanceOfAsset() internal view returns (uint256) {
         return ERC20(asset).balanceOf(address(this));
     }
 
-    function _balanceLST() internal view returns (uint256){
+    function _balanceOfLST() internal view returns (uint256){
         return ERC20(LST).balanceOf(address(this));
     }
 
@@ -626,14 +640,17 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
                 EXTERNAL:
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Returns the amount of asset the strategy holds.
-    function balanceAsset() external view returns (uint256) {
-        return _balanceAsset();
-    }
-    
-    /// @notice Returns the amount of staked asset in liquid staking token (LST) the strategy holds.
-    function balanceLST() external view returns (uint256) {
-        return _balanceLST();
+    function setLoanToValueTargets(uint256 _targetLoanToValue, uint256 _emergencyUnwindLoanToValue, uint256 _unwindLoanToValue, uint256 _windLoanToValue) external onlyManagement {
+        uint256 LT = uint256(lendingPool.getEModeCategoryData(EMODE).liquidationThreshold);
+        LT = LT * 1e14; //liquidation threshold
+        require(LT >= _emergencyUnwindLoanToValue);
+        require(_emergencyUnwindLoanToValue >= _unwindLoanToValue);
+        require(_unwindLoanToValue >= _targetLoanToValue);
+        require(_targetLoanToValue >= windLoanToValue);
+        targetLoanToValue = _targetLoanToValue;
+        emergencyUnwindLoanToValue = _emergencyUnwindLoanToValue;
+        unwindLoanToValue = _unwindLoanToValue;
+        windLoanToValue = _windLoanToValue;
     }
 
     /// @notice Set the maximum amount of asset that can be moved by keepers in a single transaction. This is to avoid unnecessarily large slippages when harvesting.
@@ -646,21 +663,9 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
         maxSingleWithdraw = _maxSingleWithdraw;
     }
 
-    /// @notice Set the maximum slippage in basis points (BPS) to accept when swapping asset <-> staked asset in liquid staking token (LST).
-    function setSwapSlippage(uint256 _swapSlippage) external onlyManagement {
-        require(_swapSlippage <= MAX_BPS);
-        swapSlippage = _swapSlippage;
-    }
-
-    /// @notice Set the buffer slippage in basis points (BPS) to pessimistically correct the totalAssets to reflect having to eventually swap LST back to asset and thus create a buffer for swaps.
-    function setBufferSlippage(uint256 _bufferSlippage) external onlyManagement {
-        require(_bufferSlippage <= MAX_BPS);
-        bufferSlippage = _bufferSlippage;
-    }
-
-    /// @notice Set the max base fee for tending to occur at.
-    function setMaxTendBasefee(uint256 _maxTendBasefee) external onlyManagement {
-        maxTendBasefee = _maxTendBasefee;
+    /// @notice Set the limit that can be deposited into the strategy.
+    function setDepositLimit(uint256 _depositLimit) external onlyManagement {
+        depositLimit = _depositLimit;
     }
 
     /// @notice Set the amount in asset that should trigger a tend if idle.
@@ -675,30 +680,72 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
         minDepositInterval = _newDepositInterval;
     }
 
-    // Change if anyone can deposit in or only white listed addresses
+    /// @notice Set the maximum variable borrow rate for asset that we still wind up for.
+    function setMaxBorrowRate (uint256 _maxBorrowRate) external onlyManagement {
+        maxBorrowRate = _maxBorrowRate;
+    }
+
+    /// @notice Change if anyone can deposit in or only white listed addresses
     function setOpen(bool _open) external onlyManagement {
         open = _open;
     }
 
-    // Set or update an addresses whitelist status.
+    /// @notice Set or update an addresses whitelist status.
     function setAllowed(address _address, bool _allowed) external onlyManagement {
         allowed[_address] = _allowed;
     }
 
+    /// @notice Set the max base fee for tending to occur at.
+    function setMaxTendBasefee(uint256 _maxTendBasefee) external onlyManagement {
+        maxTendBasefee = _maxTendBasefee;
+    }
+
+    /// @notice Set the expected flashloan fee, usually assumed to be zero, so we do not get a surprise flashloan fee.
+    function setExpectedFlashloanFee(uint256 _expectedFlashloanFee) external onlyManagement {
+        expectedFlashloanFee = _expectedFlashloanFee;
+    }
+
+    /// @notice Set the buffer slippage in basis points (BPS) to pessimistically correct the totalAssets to reflect having to eventually swap LST back to asset and thus create a buffer for swaps.
+    function setBufferSlippage(uint256 _bufferSlippage) external onlyManagement {
+        require(_bufferSlippage <= MAX_BPS);
+        bufferSlippage = _bufferSlippage;
+    }
+
+    /// @notice Set the Swapper through which all swaps are routed.
+    function setSwapper(Swapper _swapper, address _swapPool) external onlyManagement {
+        if (_swapper == Swapper.BALANCER) {
+            require(_swapPool != address(0));
+        }
+        swapper = _swapper;
+        if (swapPool != address(0)) {
+            swapPool = _swapPool;
+        }
+    }
+
+    /// @notice Set the maximum slippage in basis points (BPS) to accept when swapping asset <-> staked asset in liquid staking token (LST).
+    function setSwapSlippage(uint256 _swapSlippage) external onlyManagement {
+        require(_swapSlippage <= MAX_BPS);
+        swapSlippage = _swapSlippage;
+    }
+
     /// @notice Set the UniswapV3 fee pools to choose for swapping between asset, borrowToken (BT) or base (intermediate token for better swaps).
-    function setUniFees(
-        address _token0,
-        address _token1,
-        uint24 _fee
-    ) external onlyManagement {
+    function setUniFees(address _token0, address _token1, uint24 _fee) external onlyManagement {
         _setUniFees(_token0, _token1, _fee);
     }
 
     /// @notice Set the UniswapV3 minimum amount to swap i.e. dust.
-    function setMinAmountToSell(
-        uint256 _minAmountToSell
-    ) external onlyManagement {
+    function setMinAmountToSell(uint256 _minAmountToSell) external onlyManagement {
         minAmountToSell = _minAmountToSell;
+    }
+
+    /// @notice Set the wind and unwind functions to use Flashloans (true) or loops (false). 
+    function setUseFlashloan(bool _useFlashloan) external onlyManagement {
+        useFlashloan = _useFlashloan;
+    }
+
+    /// @notice Set the maximum number of loops to use if useFlashloan is deactivated. 
+    function setMaxLoops(uint256 _maxLoops) external onlyManagement {
+        maxLoops = _maxLoops;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -710,10 +757,33 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
         _;
     }
 
-    /// @notice Set the balancer pool address in case TVL has migrated to a new balancer pool. Only callable by governance.
-    function setFlashloan(address _balancer) external onlyGovernance {
-        require(_balancer != address(0));
-        balancer = _balancer;
+    /// @notice Set the flashloanProvider address in case balancer does not work anymore. Only callable by governance.
+    function setFlashloanProvider(address _flashloanProvider) external onlyGovernance {
+        require(_flashloanProvider != address(0));
+        flashloanProvider = _flashloanProvider;
+    }
+
+    /// @notice Manage the CDP manually in an emergency situation. Only callable by governance.
+    /// @param _function Choose the function: 0 == deposit, 1 == repay, 2 == withdraw.
+    /// @param _token Choose the token to use with the selected function.
+    /// @param _amount Choose the amount of token to use with the selected function.
+    function emergencyManageCDP(uint256 _function, address _token, uint256 _amount) external onlyGovernance {
+        if (_function == 0) {
+            lendingPool.deposit(_token, _amount, address(this), REF);
+        } else if (_function == 1) {
+            lendingPool.repay(_token, _amount, 2, address(this));
+        } else if (_function == 2) {
+            lendingPool.withdraw(_token, _amount, address(this));
+        } else {
+            revert("wrong _function selector");
+        }
+    }
+
+    /// @notice Sweep of non-asset ERC20 tokens to governance. Only callable by governance.
+    /// @param _token The ERC20 token to sweep
+    function sweep(address _token) external onlyGovernance {
+        require(_token != address(asset));
+        ERC20(_token).safeTransfer(GOV, ERC20(_token).balanceOf(address(this)));
     }
 
     /*//////////////////////////////////////////////////////////////

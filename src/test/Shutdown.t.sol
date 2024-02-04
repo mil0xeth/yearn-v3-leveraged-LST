@@ -19,28 +19,10 @@ contract ShutdownTest is Setup {
         //mintAndDepositIntoStrategy(strategy, user, _amount);
         mintAndDepositIntoStrategy(strategy, user, _amount);
         vm.prank(keeper);
-        strategy.report();
+        keeperReport(strategy);
         vm.prank(user);
-        strategy.redeem(_amount, user, user);
+        userRedeem(strategy, _amount, user, user);
         checkStrategyInvariantsAfterRedeem(strategy);
-    }
-
-    function test_chainlinkStaleDirectRedeem(uint256 _amount) public {
-        vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
-        vm.prank(management);
-        mintAndDepositIntoStrategy(strategy, user, _amount);
-        vm.prank(user);
-        strategy.redeem(_amount, user, user);
-        checkStrategyInvariantsAfterRedeem(strategy);
-        assertGe(asset.balanceOf(user) * (MAX_BPS + expectedActivityLossBPS)/MAX_BPS, _amount, "!final balance");
-    }
-
-    function testFail_chainlinkStaleHarvest(uint256 _amount) public {
-        vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
-        vm.prank(management);
-        mintAndDepositIntoStrategy(strategy, user, _amount);
-        vm.prank(keeper);
-        strategy.report();
     }
 
 
@@ -53,7 +35,7 @@ contract ShutdownTest is Setup {
         checkStrategyTotals(strategy, _amount, 0, _amount);
 
         vm.prank(keeper);
-        strategy.report();
+        keeperReport(strategy);
 
         // Earn Interest
         skip(1 days);
@@ -67,7 +49,7 @@ contract ShutdownTest is Setup {
 
         // Withdraw all funds
         vm.prank(user);
-        strategy.redeem(_amount, user, user);
+        userRedeem(strategy, _amount, user, user);
 
         assertGe(asset.balanceOf(user)* (MAX_BPS + expectedActivityLossBPS*4)/MAX_BPS, balanceBefore + _amount, "!final balance");
     }

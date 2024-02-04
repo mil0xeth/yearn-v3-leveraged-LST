@@ -23,6 +23,8 @@ contract OperationTest is Setup {
     }
 
     function test_operation_NoFees(uint256 _amount) public {
+        uint256 profit;
+        uint256 loss;
         console.log("strategy.address", address(strategy));
         console.log("GAS BEFORE ASSUME", address(strategy).balance);
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
@@ -41,8 +43,7 @@ contract OperationTest is Setup {
         console.log("GAS AFTER SKIP", address(strategy).balance);
 
         // Report loss
-        vm.prank(keeper);
-        (uint256 profit, uint256 loss) = strategy.report();
+        (profit, loss) = keeperReport(strategy);
         console.log("GAS BEFORE SKIP", address(strategy).balance);
         checkStrategyInvariantsAfterReport(strategy);
         // Check return Values
@@ -55,7 +56,8 @@ contract OperationTest is Setup {
 
         // Withdraw all funds
         vm.prank(user);
-        strategy.redeem(_amount, user, user);
+        userRedeem(strategy, _amount, user, user);
+
         checkStrategyInvariantsAfterRedeem(strategy);
 
         checkStrategyTotals(strategy, 0, 0, 0);
@@ -79,7 +81,7 @@ contract OperationTest is Setup {
 
         // Report loss
         vm.prank(keeper);
-        (profit, loss) = strategy.report();
+        (profit, loss) = keeperReport(strategy);
         checkStrategyInvariantsAfterReport(strategy);
         // Check return Values
         assertGe(profit, 0, "!profit");
@@ -101,7 +103,7 @@ contract OperationTest is Setup {
 
         // Report profit
         vm.prank(keeper);
-        (profit, loss) = strategy.report();
+        (profit, loss) = keeperReport(strategy);
         checkStrategyInvariantsAfterReport(strategy);
 
         // Check return Values
@@ -112,16 +114,16 @@ contract OperationTest is Setup {
          
 
         console.log("TOTAL ASSETS after airdorp report", strategy.totalAssets());
-        console.log("balanceLST", strategy.balanceLST());
+        console.log("balanceOfLST", strategy.balanceOfLST());
     
         skip(strategy.profitMaxUnlockTime());
         console.log("TOTAL ASSETS after unlocktime report", strategy.totalAssets());
-        console.log("balanceLST", strategy.balanceLST());
+        console.log("balanceOfLST", strategy.balanceOfLST());
         uint256 balanceBefore = asset.balanceOf(user);
 
         // Withdraw all funds
         vm.prank(user);
-        strategy.redeem(_amount, user, user);
+        userRedeem(strategy, _amount, user, user);
         checkStrategyInvariantsAfterRedeem(strategy);
 
         checkStrategyTotals(strategy, 0, 0, 0);
@@ -146,7 +148,7 @@ contract OperationTest is Setup {
         checkStrategyTotals(strategy, _amount, 0, _amount);
         // Report loss
         vm.prank(keeper);
-        (profit, loss) = strategy.report();
+        (profit, loss) = keeperReport(strategy);
         checkStrategyInvariantsAfterReport(strategy);
         // Check return Values
         assertGe(profit, 0, "!profit");
@@ -168,7 +170,7 @@ contract OperationTest is Setup {
 
         // Report profit
         vm.prank(keeper);
-        (profit, loss) = strategy.report();
+        (profit, loss) = keeperReport(strategy);
         checkStrategyInvariantsAfterReport(strategy);
 
         // Check return Values
@@ -179,15 +181,15 @@ contract OperationTest is Setup {
          
 
         console.log("TOTAL ASSETS after airdorp report", strategy.totalAssets());
-        console.log("balanceLST", strategy.balanceLST());
+        console.log("balanceOfLST", strategy.balanceOfLST());
         skip(strategy.profitMaxUnlockTime());
         console.log("TOTAL ASSETS after unlocktime report", strategy.totalAssets());
-        console.log("balanceLST", strategy.balanceLST());
+        console.log("balanceOfLST", strategy.balanceOfLST());
         uint256 balanceBefore = asset.balanceOf(user);
 
         // Withdraw all funds
         vm.prank(user);
-        strategy.redeem(_amount, user, user);
+        userRedeem(strategy, _amount, user, user);
         checkStrategyInvariantsAfterRedeem(strategy);
         checkStrategyTotals(strategy, 0, 0, 0);
         assertGe(asset.balanceOf(user) * (MAX_BPS + expectedActivityLossBPS)/MAX_BPS, balanceBefore + _amount + toAirdrop, "!final balance");
@@ -223,7 +225,7 @@ contract OperationTest is Setup {
 
         // Report loss
         vm.prank(keeper);
-        (profit, loss) = strategy.report();
+        (profit, loss) = keeperReport(strategy);
         checkStrategyInvariantsAfterReport(strategy);
         // Check return Values
         assertGe(profit, 0, "!profit");
@@ -245,7 +247,7 @@ contract OperationTest is Setup {
 
         // Report profit
         vm.prank(keeper);
-        (profit, loss) = strategy.report();
+        (profit, loss) = keeperReport(strategy);
         checkStrategyInvariantsAfterReport(strategy);
 
         // Check return Values
@@ -256,39 +258,34 @@ contract OperationTest is Setup {
          
 
         console.log("TOTAL ASSETS after airdorp report", strategy.totalAssets());
-        console.log("balanceLST", strategy.balanceLST());
-         
-         
+        console.log("balanceOfLST", strategy.balanceOfLST());
          
         skip(strategy.profitMaxUnlockTime());
         console.log("TOTAL ASSETS after unlocktime report", strategy.totalAssets());
-        console.log("balanceLST", strategy.balanceLST());
-         
-         
-         
-
+        console.log("balanceOfLST", strategy.balanceOfLST());
+        
         // Withdraw part of funds user
         //uint256 balanceBefore = asset.balanceOf(user) + asset.balanceOf(secondUser) + asset.balanceOf(thirdUser);
         redeemAmount = strategy.balanceOf(user) / 8;
         vm.prank(user);
-        strategy.redeem(redeemAmount, user, user);
+        userRedeem(strategy, redeemAmount, user, user);
         checkStrategyInvariantsAfterRedeem(strategy);
 
         // Withdraw part of funds secondUser
         redeemAmount = strategy.balanceOf(secondUser) / 6;
         vm.prank(secondUser);
-        strategy.redeem(redeemAmount, secondUser, secondUser);
+        userRedeem(strategy, redeemAmount, secondUser, secondUser);
         checkStrategyInvariantsAfterRedeem(strategy);
 
         // Withdraw part of funds thirdUser
         redeemAmount = strategy.balanceOf(thirdUser) / 4;
         vm.prank(thirdUser);
-        strategy.redeem(redeemAmount, thirdUser, thirdUser);
+        userRedeem(strategy, redeemAmount, thirdUser, thirdUser);
         checkStrategyInvariantsAfterRedeem(strategy);
 
         // Report profit
         vm.prank(keeper);
-        (profit, loss) = strategy.report();
+        (profit, loss) = keeperReport(strategy);
         checkStrategyInvariantsAfterReport(strategy);
         skip(strategy.profitMaxUnlockTime());
 
@@ -302,19 +299,19 @@ contract OperationTest is Setup {
         redeemAmount = strategy.balanceOf(user);
         if (redeemAmount > 0){
             vm.prank(user);
-            strategy.redeem(redeemAmount, user, user);
+            userRedeem(strategy, redeemAmount, user, user);
             checkStrategyInvariantsAfterRedeem(strategy);
         }
         redeemAmount = strategy.balanceOf(secondUser);
         if (redeemAmount > 0){
             vm.prank(secondUser);
-            strategy.redeem(redeemAmount, secondUser, secondUser);
+            userRedeem(strategy, redeemAmount, secondUser, secondUser);
             checkStrategyInvariantsAfterRedeem(strategy);
         }
         redeemAmount = strategy.balanceOf(thirdUser);
         if (redeemAmount > 0){
             vm.prank(thirdUser);
-            strategy.redeem(redeemAmount, thirdUser, thirdUser);
+            userRedeem(strategy, redeemAmount, thirdUser, thirdUser);
             checkStrategyInvariantsAfterRedeem(strategy);
         }
         // verify users earned profit
@@ -360,7 +357,7 @@ contract OperationTest is Setup {
 
         // Report loss
         vm.prank(keeper);
-        (profit, loss) = strategy.report();
+        (profit, loss) = keeperReport(strategy);
         checkStrategyInvariantsAfterReport(strategy);
         // Check return Values
         assertGe(profit, 0, "!profit");
@@ -382,7 +379,7 @@ contract OperationTest is Setup {
 
         // Report profit
         vm.prank(keeper);
-        (profit, loss) = strategy.report();
+        (profit, loss) = keeperReport(strategy);
         checkStrategyInvariantsAfterReport(strategy);
 
         // Check return Values
@@ -390,7 +387,6 @@ contract OperationTest is Setup {
         console.log("profit after second report", profit);
         assertGe(strategy.totalAssets() * expectedActivityLossBPS / MAX_BPS, loss, "!loss");
         console.log("loss after second report", loss);
-         
 
         skip(strategy.profitMaxUnlockTime());
 
@@ -398,24 +394,24 @@ contract OperationTest is Setup {
         //uint256 balanceBefore = asset.balanceOf(user) + asset.balanceOf(secondUser) + asset.balanceOf(thirdUser);
         redeemAmount = strategy.balanceOf(user) / 8;
         vm.prank(user);
-        strategy.redeem(redeemAmount, user, user);
+        userRedeem(strategy, redeemAmount, user, user);
         checkStrategyInvariantsAfterRedeem(strategy);
 
         // Withdraw part of funds secondUser
         redeemAmount = strategy.balanceOf(secondUser) / 6;
         vm.prank(secondUser);
-        strategy.redeem(redeemAmount, secondUser, secondUser);
+        userRedeem(strategy, redeemAmount, secondUser, secondUser);
         checkStrategyInvariantsAfterRedeem(strategy);
 
         // Withdraw part of funds thirdUser
         redeemAmount = strategy.balanceOf(thirdUser) / 4;
         vm.prank(thirdUser);
-        strategy.redeem(redeemAmount, thirdUser, thirdUser);
+        userRedeem(strategy, redeemAmount, thirdUser, thirdUser);
         checkStrategyInvariantsAfterRedeem(strategy);
 
         // Report profit
         vm.prank(keeper);
-        (profit, loss) = strategy.report();
+        (profit, loss) = keeperReport(strategy);
         checkStrategyInvariantsAfterReport(strategy);
         skip(strategy.profitMaxUnlockTime());
 
@@ -426,19 +422,19 @@ contract OperationTest is Setup {
         redeemAmount = strategy.balanceOf(user);
         if (redeemAmount > 0){
             vm.prank(user);
-            strategy.redeem(redeemAmount, user, user);
+            userRedeem(strategy, redeemAmount, user, user);
             checkStrategyInvariantsAfterRedeem(strategy);
         }
         redeemAmount = strategy.balanceOf(secondUser);
         if (redeemAmount > 0){
             vm.prank(secondUser);
-            strategy.redeem(redeemAmount, secondUser, secondUser);
+            userRedeem(strategy, redeemAmount, secondUser, secondUser);
             checkStrategyInvariantsAfterRedeem(strategy);
         }
         redeemAmount = strategy.balanceOf(thirdUser);
         if (redeemAmount > 0){
             vm.prank(thirdUser);
-            strategy.redeem(redeemAmount, thirdUser, thirdUser);
+            userRedeem(strategy, redeemAmount, thirdUser, thirdUser);
             checkStrategyInvariantsAfterRedeem(strategy);
         }
         // verify users earned profit
@@ -470,7 +466,7 @@ contract OperationTest is Setup {
 
         // Report loss
         vm.prank(keeper);
-        (profit, loss) = strategy.report();
+        (profit, loss) = keeperReport(strategy);
         checkStrategyInvariantsAfterReport(strategy);
         // Check return Values
         assertGe(profit, 0, "!profit");
@@ -490,7 +486,7 @@ contract OperationTest is Setup {
 
         // Report profit
         vm.prank(keeper);
-        (profit, loss) = strategy.report();
+        (profit, loss) = keeperReport(strategy);
         checkStrategyInvariantsAfterReport(strategy);
         console.log("after profit report: actualShares of performanceFeeRecipient", strategy.balanceOf(performanceFeeRecipient));
 
@@ -501,11 +497,11 @@ contract OperationTest is Setup {
         console.log("loss after second report", loss);
 
         console.log("TOTAL ASSETS after airdorp report", strategy.totalAssets());
-        console.log("balanceLST", strategy.balanceLST());
+        console.log("balanceOfLST", strategy.balanceOfLST());
          
         skip(strategy.profitMaxUnlockTime());
         console.log("TOTAL ASSETS after maxunlocktime", strategy.totalAssets());
-        console.log("balanceLST", strategy.balanceLST());
+        console.log("balanceOfLST", strategy.balanceOfLST());
          
         // Get the expected fee
         uint256 actualShares = strategy.balanceOf(performanceFeeRecipient);
@@ -518,7 +514,7 @@ contract OperationTest is Setup {
 
         // Withdraw all funds
         vm.prank(user);
-        strategy.redeem(_amount, user, user);
+        userRedeem(strategy, _amount, user, user);
         checkStrategyInvariantsAfterRedeem(strategy);
 
         assertGe(asset.balanceOf(user) * (MAX_BPS + expectedActivityLossBPS)/MAX_BPS, balanceBefore + _amount, "!final balance");
@@ -526,7 +522,7 @@ contract OperationTest is Setup {
         
         if (actualShares > 0){
             vm.prank(performanceFeeRecipient);
-            strategy.redeem(actualShares, performanceFeeRecipient, performanceFeeRecipient);
+            userRedeem(strategy, actualShares, performanceFeeRecipient, performanceFeeRecipient);
             checkStrategyInvariantsAfterRedeem(strategy);
         }
         
@@ -554,7 +550,7 @@ contract OperationTest is Setup {
 
         // Report loss
         vm.prank(keeper);
-        (profit, loss) = strategy.report();
+        (profit, loss) = keeperReport(strategy);
         checkStrategyInvariantsAfterReport(strategy);
         // Check return Values
         assertGe(profit, 0, "!profit");
@@ -575,7 +571,7 @@ contract OperationTest is Setup {
 
         // Report profit
         vm.prank(keeper);
-        (profit, loss) = strategy.report();
+        (profit, loss) = keeperReport(strategy);
         checkStrategyInvariantsAfterReport(strategy);
         console.log("after profit report: actualShares of performanceFeeRecipient", strategy.balanceOf(performanceFeeRecipient));
 
@@ -586,11 +582,11 @@ contract OperationTest is Setup {
         console.log("loss after second report", loss);
 
         console.log("TOTAL ASSETS after airdorp report", strategy.totalAssets());
-        console.log("balanceLST", strategy.balanceLST());
+        console.log("balanceOfLST", strategy.balanceOfLST());
          
         skip(strategy.profitMaxUnlockTime());
         console.log("TOTAL ASSETS after maxunlocktime", strategy.totalAssets());
-        console.log("balanceLST", strategy.balanceLST());
+        console.log("balanceOfLST", strategy.balanceOfLST());
          
         // Get the expected fee
         uint256 actualShares = strategy.balanceOf(performanceFeeRecipient);
@@ -603,7 +599,7 @@ contract OperationTest is Setup {
 
         // Withdraw all funds
         vm.prank(user);
-        strategy.redeem(_amount, user, user);
+        userRedeem(strategy, _amount, user, user);
         checkStrategyInvariantsAfterRedeem(strategy);
 
         assertGe(asset.balanceOf(user) * (MAX_BPS + expectedActivityLossBPS)/MAX_BPS, balanceBefore + _amount, "!final balance");
@@ -611,7 +607,7 @@ contract OperationTest is Setup {
         
         if (actualShares > 0){
             vm.prank(performanceFeeRecipient);
-            strategy.redeem(actualShares, performanceFeeRecipient, performanceFeeRecipient);
+            userRedeem(strategy, actualShares, performanceFeeRecipient, performanceFeeRecipient);
             checkStrategyInvariantsAfterRedeem(strategy);
         }
         
@@ -640,7 +636,7 @@ contract OperationTest is Setup {
 
         // Report loss
         vm.prank(keeper);
-        (profit, loss) = strategy.report();
+        (profit, loss) = keeperReport(strategy);
         checkStrategyInvariantsAfterReport(strategy);
         // Check return Values
         assertGe(profit, 0, "!profit");
@@ -661,7 +657,7 @@ contract OperationTest is Setup {
 
         // Report profit
         vm.prank(keeper);
-        (profit, loss) = strategy.report();
+        (profit, loss) = keeperReport(strategy);
         checkStrategyInvariantsAfterReport(strategy);
         console.log("after profit report: actualShares of performanceFeeRecipient", strategy.balanceOf(performanceFeeRecipient));
         // Check return Values
@@ -671,11 +667,11 @@ contract OperationTest is Setup {
         console.log("loss after second report", loss);
 
         console.log("TOTAL ASSETS after airdorp report", strategy.totalAssets());
-        console.log("balanceLST", strategy.balanceLST());
+        console.log("balanceOfLST", strategy.balanceOfLST());
          
         skip(strategy.profitMaxUnlockTime());
         console.log("TOTAL ASSETS after maxunlocktime", strategy.totalAssets());
-        console.log("balanceLST", strategy.balanceLST());
+        console.log("balanceOfLST", strategy.balanceOfLST());
          
         // Get the expected fee
         uint256 actualShares = strategy.balanceOf(performanceFeeRecipient);
@@ -688,25 +684,25 @@ contract OperationTest is Setup {
 
         // Withdraw all funds
         vm.prank(user);
-        strategy.redeem(_amount, user, user);
+        userRedeem(strategy, _amount, user, user);
         checkStrategyInvariantsAfterRedeem(strategy);
         assertGe(asset.balanceOf(user) * (MAX_BPS + expectedActivityLossBPS)/MAX_BPS, balanceBefore + _amount, "!final balance");
         console.log("user balance at end", asset.balanceOf(user));
         
         // Report profit third report
         vm.prank(keeper);
-        (profit, loss) = strategy.report();
+        (profit, loss) = keeperReport(strategy);
         checkStrategyInvariantsAfterReport(strategy);
         // Check return Values
         assertGe(strategy.totalAssets() * expectedActivityLossBPS / MAX_BPS, loss, "!loss");
         console.log("loss after third report", loss);
         actualShares = strategy.balanceOf(performanceFeeRecipient);
         console.log("TOTAL ASSETS after third report", strategy.totalAssets());
-         console.log("balanceLST", strategy.balanceLST());
+         console.log("balanceOfLST", strategy.balanceOfLST());
 
         // Report profit fourth report
         vm.prank(keeper);
-        (profit, loss) = strategy.report();
+        (profit, loss) = keeperReport(strategy);
         checkStrategyInvariantsAfterReport(strategy);
         // Check return Values
         assertGe(strategy.totalAssets() * expectedActivityLossBPS / MAX_BPS, loss, "!loss");
@@ -714,15 +710,15 @@ contract OperationTest is Setup {
         actualShares = strategy.balanceOf(performanceFeeRecipient);
 
         console.log("TOTAL ASSETS after fourth report", strategy.totalAssets());
-         console.log("balanceLST", strategy.balanceLST());
+         console.log("balanceOfLST", strategy.balanceOfLST());
 
         skip(strategy.profitMaxUnlockTime());
         console.log("TOTAL ASSETS after unlocking fourth report", strategy.totalAssets());
-         console.log("balanceLST", strategy.balanceLST());
+         console.log("balanceOfLST", strategy.balanceOfLST());
 
         if (actualShares > 0){
             vm.prank(performanceFeeRecipient);
-            strategy.redeem(actualShares, performanceFeeRecipient, performanceFeeRecipient);
+            userRedeem(strategy, actualShares, performanceFeeRecipient, performanceFeeRecipient);
             checkStrategyInvariantsAfterRedeem(strategy);
         }
 
