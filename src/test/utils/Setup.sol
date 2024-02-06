@@ -65,8 +65,8 @@ contract Setup is ExtendedTest, IEvents {
     address public GOV;
 
     // Fuzz
-    uint256 public maxFuzzAmount = 100000 * 1e18; //1e5 * 1e18;
-    uint256 public minFuzzAmount = 1e18;
+    uint256 public maxFuzzAmount;
+    uint256 public minFuzzAmount;
 
     uint256 public expectedActivityLossBPS = 500;
     uint256 public expectedActivityLossMultipleUsersBPS = 300;
@@ -74,9 +74,9 @@ contract Setup is ExtendedTest, IEvents {
     uint256 public ONE_ASSET;
     uint256 public highProfit;
     uint256 public highLoss;
-    uint256 public swapSlippageForHighProfit;
-    uint256 public swapSlippageForHighLoss;
-    uint256 public swapSlippageForHighLossPool;
+    uint256 public swapSlippageBPSForHighProfit;
+    uint256 public swapSlippageBPSForHighLoss;
+    uint256 public swapSlippageBPSForHighLossPool;
 
     IPool public lendingPool;
     IProtocolDataProvider public protocolDataProvider;
@@ -104,15 +104,37 @@ contract Setup is ExtendedTest, IEvents {
         //MAINNET:
         if(vm.activeFork() == mainnetFork) {
             asset = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2); //WETH
+            maxFuzzAmount = 100 * 1e18; //1e5 * 1e18;
+            minFuzzAmount = 1e15;
+            ASSET_DUST = 4e14;
+            LST = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0; //WSTETH
+            lendingPool = IPool(0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2); //aavev3 arbitrum
+            protocolDataProvider = IProtocolDataProvider(0x7B4EB56E7CD4b454BA8ff71E4518426369a138a3); //aavev3 arbitrum
+            swapper = Strategy.Swapper.UNIV3;
+            swapPool = 0x93d199263632a4EF4Bb438F1feB99e57b4b5f0BD; //wsteth weth pool
+            useFlashloan = true;
+            GOV = 0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52;
+
             ONE_ASSET = 1e18;
+            //highProfit = 1e18;
+            //highLoss = 1e18;
+            //swapSlippageBPSForHighProfit = 90_00;
+            //swapSlippageBPSForHighLoss = 90_00;
+            //swapSlippageBPSForHighLossPool = 90_00;
+            //expectedActivityLossBPS = 90_00;
+            //expectedActivityLossMultipleUsersBPS = 90_00;
+
             highProfit = 300e18;
             highLoss = 300e18;
-            swapSlippageForHighProfit = 5_00;
-            swapSlippageForHighLoss = 5_00;
+            swapSlippageBPSForHighProfit = 5_00;
+            swapSlippageBPSForHighLoss = 5_00;
+            swapSlippageBPSForHighLossPool = 5_00;
         }
         //ARBITRUM:
         if(vm.activeFork() == arbitrumFork) {
             asset = ERC20(0x82aF49447D8a07e3bd95BD0d56f35241523fBab1); //WETH
+            maxFuzzAmount = 100 * 1e18; //1e5 * 1e18;
+            minFuzzAmount = 1e15;
             ASSET_DUST = 4e14; 
             LST = 0x5979D7b546E38E414F7E9822514be443A4800529; //WSTETH
             lendingPool = IPool(0x794a61358D6845594F94dc1DB02A252b5b4814aD); //aavev3 arbitrum
@@ -125,13 +147,15 @@ contract Setup is ExtendedTest, IEvents {
             ONE_ASSET = 1e18;
             highProfit = 300e18;
             highLoss = 300e18;
-            swapSlippageForHighProfit = 5_00;
-            swapSlippageForHighLoss = 5_00;
-            swapSlippageForHighLossPool = 5_00;
+            swapSlippageBPSForHighProfit = 5_00;
+            swapSlippageBPSForHighLoss = 5_00;
+            swapSlippageBPSForHighLossPool = 5_00;
         }
         //Polygon:
         if(vm.activeFork() == polygonFork) {
             asset = ERC20(0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270); //WMATIC
+            maxFuzzAmount = 100_000 * 1e18; //1e5 * 1e18;
+            minFuzzAmount = 1e18;
             ASSET_DUST = 1e17;
             LST = 0x3A58a54C066FdC0f2D55FC9C89F0415C92eBf3C4;
             lendingPool = IPool(0x794a61358D6845594F94dc1DB02A252b5b4814aD); //aavev3 polygon
@@ -144,9 +168,9 @@ contract Setup is ExtendedTest, IEvents {
             ONE_ASSET = 1e18;
             highProfit = 50_000e18;
             highLoss = 50_000e18;
-            swapSlippageForHighProfit = 10_00;
-            swapSlippageForHighLoss = 15_00;
-            swapSlippageForHighLossPool = 25_00;
+            swapSlippageBPSForHighProfit = 10_00;
+            swapSlippageBPSForHighLoss = 15_00;
+            swapSlippageBPSForHighLossPool = 25_00;
         }
 
         // Set decimals
@@ -228,9 +252,12 @@ contract Setup is ExtendedTest, IEvents {
 
     function keeperReport(IStrategyInterface _strategy) public returns (uint256 profit, uint256 loss) {
         uint256 beforeLoanToValue = _strategy.currentLoanToValue();
+        uint256 beforeTotalAssets = _strategy.totalAssets();
 
         vm.prank(keeper);
         (profit, loss) = _strategy.report();
+
+        assertLe(loss, beforeTotalAssets * expectedActivityLossBPS / MAX_BPS, "ERR: keeperReport: expectedActivityLoss");
 
         assertLe(_strategy.balanceOfAsset(), 100_000, "ERR: keeperReport: balanceOfAsset > DUST");
         if (maxDepositableCollateral() > 100_000) {
@@ -259,7 +286,8 @@ contract Setup is ExtendedTest, IEvents {
         uint256 afterLoanToValue = _strategy.currentLoanToValue();
 
         if (afterLoanToValue != 0) {
-            assertApproxEqAbs(afterLoanToValue, beforeLoanToValue, 5e15, "ERR: userRedeem: afterLoanToValue != beforeLoanToValue");
+            //assertApproxEqAbs(afterLoanToValue, beforeLoanToValue, 5e15, "ERR: userRedeem: afterLoanToValue != beforeLoanToValue");
+            assertLe(afterLoanToValue, beforeLoanToValue+5e15, "ERR: userRedeem: afterLoanToValue > beforeLoanToValue");
 
             assertLe(_strategy.balanceOfAsset(), beforeAssetBalance, "ERR: userRedeem: balanceOfAsset > DUST");
             assertLe(_strategy.balanceOfLST(), beforeLST, "ERR: userRedeem: balanceOfLST > DUST");

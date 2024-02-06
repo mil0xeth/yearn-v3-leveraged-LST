@@ -11,6 +11,7 @@ interface IStrategyInterface is IStrategy {
     function balanceOfDebt() external view returns (uint256);
     function LST() external view returns (address);
     function maxSingleTrade() external view returns (uint256);
+    function maxSingleWithdraw() external view returns (uint256);
     function targetLoanToValue() external view returns (uint256);
     function windLoanToValue() external view returns (uint256);
     function unwindLoanToValue() external view returns (uint256);
@@ -19,7 +20,7 @@ interface IStrategyInterface is IStrategy {
 
     function currentLoanToValue() external view returns (uint256);
 
-    function setSwapSlippage(uint256) external;
+    function setSwapSlippageBPS(uint256) external;
     function setProfitLimitRatio(uint256) external;
     function setLossLimitRatio(uint256) external;
 

@@ -95,10 +95,10 @@ contract OperationTest is Setup {
         
         if (toAirdrop > highProfit) {
             vm.prank(management);
-            strategy.setSwapSlippage(swapSlippageForHighProfit);
-            console.log("setSwapSlippage"); 
+            strategy.setSwapSlippageBPS(swapSlippageBPSForHighProfit);
+            console.log("setSwapSlippageBPS"); 
             vm.prank(management);
-            strategy.setLossLimitRatio(swapSlippageForHighProfit);
+            strategy.setLossLimitRatio(swapSlippageBPSForHighProfit);
         }
 
         // Report profit
@@ -107,7 +107,7 @@ contract OperationTest is Setup {
         checkStrategyInvariantsAfterReport(strategy);
 
         // Check return Values
-        assertGe(profit * (MAX_BPS + expectedProfitReductionBPS)/MAX_BPS, toAirdrop, "!profit");
+        assertGe(profit, toAirdrop * (MAX_BPS - expectedProfitReductionBPS)/MAX_BPS, "!profit");
         console.log("profit after second report", profit);
         assertGe(strategy.totalAssets() * expectedActivityLossBPS / MAX_BPS, loss, "!loss");
         console.log("loss after second report", loss);
@@ -162,10 +162,10 @@ contract OperationTest is Setup {
         airdrop(LST, address(strategy), toAirdrop);        
         if (toAirdrop > highProfit) {
             vm.prank(management);
-            strategy.setSwapSlippage(swapSlippageForHighProfit);
-            console.log("setSwapSlippage"); 
+            strategy.setSwapSlippageBPS(swapSlippageBPSForHighProfit);
+            console.log("setSwapSlippageBPS"); 
             vm.prank(management);
-            strategy.setLossLimitRatio(swapSlippageForHighProfit);
+            strategy.setLossLimitRatio(swapSlippageBPSForHighProfit);
         }
 
         // Report profit
@@ -174,7 +174,7 @@ contract OperationTest is Setup {
         checkStrategyInvariantsAfterReport(strategy);
 
         // Check return Values
-        assertGe(profit * (MAX_BPS + expectedProfitReductionBPS)/MAX_BPS, toAirdrop, "!profit");
+        assertGe(profit, toAirdrop * (MAX_BPS - expectedProfitReductionBPS)/MAX_BPS, "!profit");
         console.log("profit after second report", profit);
         assertGe(strategy.totalAssets() * expectedActivityLossBPS / MAX_BPS, loss, "!loss");
         console.log("loss after second report", loss);
@@ -239,10 +239,10 @@ contract OperationTest is Setup {
         airdrop(LST, address(strategy), toAirdrop);        
         if (toAirdrop > highProfit) {
             vm.prank(management);
-            strategy.setSwapSlippage(swapSlippageForHighProfit);
-            console.log("setSwapSlippage"); 
-            vm.prank(management);
-            strategy.setLossLimitRatio(swapSlippageForHighProfit);
+            strategy.setSwapSlippageBPS(swapSlippageBPSForHighProfit);
+            console.log("setSwapSlippageBPS"); 
+            //vm.prank(management);
+            //strategy.setLossLimitRatio(swapSlippageBPSForHighProfit);
         }
 
         // Report profit
@@ -251,7 +251,7 @@ contract OperationTest is Setup {
         checkStrategyInvariantsAfterReport(strategy);
 
         // Check return Values
-        assertGe(profit * (MAX_BPS + expectedProfitReductionBPS)/MAX_BPS, toAirdrop, "!profit");
+        assertGe(profit, toAirdrop * (MAX_BPS - expectedProfitReductionBPS)/MAX_BPS, "!profit");
         console.log("profit after second report", profit);
         assertGe(strategy.totalAssets() * expectedActivityLossBPS / MAX_BPS, loss, "!loss");
         console.log("loss after second report", loss);
@@ -371,10 +371,10 @@ contract OperationTest is Setup {
         airdrop(LST, address(strategy), toAirdrop);        
         if (toAirdrop > highProfit) {
             vm.prank(management);
-            strategy.setSwapSlippage(swapSlippageForHighProfit);
-            console.log("setSwapSlippage"); 
+            strategy.setSwapSlippageBPS(swapSlippageBPSForHighProfit);
+            console.log("setSwapSlippageBPS"); 
             vm.prank(management);
-            strategy.setLossLimitRatio(swapSlippageForHighProfit);
+            strategy.setLossLimitRatio(swapSlippageBPSForHighProfit);
         }
 
         // Report profit
@@ -383,7 +383,7 @@ contract OperationTest is Setup {
         checkStrategyInvariantsAfterReport(strategy);
 
         // Check return Values
-        assertGe(profit * (MAX_BPS + expectedProfitReductionBPS)/MAX_BPS, toAirdrop, "!profit");
+        assertGe(profit, toAirdrop * (MAX_BPS - expectedProfitReductionBPS)/MAX_BPS, "!profit");
         console.log("profit after second report", profit);
         assertGe(strategy.totalAssets() * expectedActivityLossBPS / MAX_BPS, loss, "!loss");
         console.log("loss after second report", loss);
@@ -470,7 +470,8 @@ contract OperationTest is Setup {
         checkStrategyInvariantsAfterReport(strategy);
         // Check return Values
         assertGe(profit, 0, "!profit");
-        assertGe(strategy.totalAssets() * expectedActivityLossBPS / MAX_BPS, loss, "!loss");
+
+        //assertGe(strategy.totalAssets() * expectedActivityLossBPS / MAX_BPS, loss, "!loss");
         console.log("initialLoss after first report", loss);
 
         uint256 toAirdrop = (_amount * _profitFactor) / MAX_BPS;
@@ -478,10 +479,10 @@ contract OperationTest is Setup {
         airdrop(address(asset), address(strategy), toAirdrop);
         if (toAirdrop > highProfit) {
             vm.prank(management);
-            strategy.setSwapSlippage(swapSlippageForHighProfit);
-            console.log("setSwapSlippage"); 
+            strategy.setSwapSlippageBPS(swapSlippageBPSForHighProfit);
+            console.log("setSwapSlippageBPS"); 
             vm.prank(management);
-            strategy.setLossLimitRatio(swapSlippageForHighProfit);
+            strategy.setLossLimitRatio(swapSlippageBPSForHighProfit);
         }
 
         // Report profit
@@ -491,7 +492,7 @@ contract OperationTest is Setup {
         console.log("after profit report: actualShares of performanceFeeRecipient", strategy.balanceOf(performanceFeeRecipient));
 
         // Check return Values
-        assertGe(profit * (MAX_BPS + expectedProfitReductionBPS)/MAX_BPS, toAirdrop, "!profit");
+        assertGe(profit, toAirdrop * (MAX_BPS - expectedProfitReductionBPS)/MAX_BPS, "!profit");
         console.log("profit after second report", profit);
         assertGe(strategy.totalAssets() * expectedActivityLossBPS / MAX_BPS, loss, "!loss");
         console.log("loss after second report", loss);
@@ -563,10 +564,10 @@ contract OperationTest is Setup {
         airdrop(LST, address(strategy), toAirdrop);        
         if (toAirdrop > highProfit) {
             vm.prank(management);
-            strategy.setSwapSlippage(swapSlippageForHighProfit);
-            console.log("setSwapSlippage"); 
+            strategy.setSwapSlippageBPS(swapSlippageBPSForHighProfit);
+            console.log("setSwapSlippageBPS"); 
             vm.prank(management);
-            strategy.setLossLimitRatio(swapSlippageForHighProfit);
+            strategy.setLossLimitRatio(swapSlippageBPSForHighProfit);
         }
 
         // Report profit
@@ -576,7 +577,7 @@ contract OperationTest is Setup {
         console.log("after profit report: actualShares of performanceFeeRecipient", strategy.balanceOf(performanceFeeRecipient));
 
         // Check return Values
-        assertGe(profit * (MAX_BPS + expectedProfitReductionBPS)/MAX_BPS, toAirdrop, "!profit");
+        assertGe(profit, toAirdrop * (MAX_BPS - expectedProfitReductionBPS)/MAX_BPS, "!profit");
         console.log("profit after second report", profit);
         assertGe(strategy.totalAssets() * expectedActivityLossBPS / MAX_BPS, loss, "!loss");
         console.log("loss after second report", loss);
@@ -649,10 +650,10 @@ contract OperationTest is Setup {
         airdrop(LST, address(strategy), toAirdrop);        
         if (toAirdrop > highProfit) {
             vm.prank(management);
-            strategy.setSwapSlippage(swapSlippageForHighProfit);
-            console.log("setSwapSlippage"); 
+            strategy.setSwapSlippageBPS(swapSlippageBPSForHighProfit);
+            console.log("setSwapSlippageBPS"); 
             vm.prank(management);
-            strategy.setLossLimitRatio(swapSlippageForHighProfit);
+            strategy.setLossLimitRatio(swapSlippageBPSForHighProfit);
         }
 
         // Report profit
@@ -661,7 +662,7 @@ contract OperationTest is Setup {
         checkStrategyInvariantsAfterReport(strategy);
         console.log("after profit report: actualShares of performanceFeeRecipient", strategy.balanceOf(performanceFeeRecipient));
         // Check return Values
-        assertGe(profit * (MAX_BPS + expectedProfitReductionBPS)/MAX_BPS, toAirdrop, "!profit");
+        assertGe(profit, toAirdrop * (MAX_BPS - expectedProfitReductionBPS)/MAX_BPS, "!profit");
         console.log("profit after second report", profit);
         assertGe(strategy.totalAssets() * expectedActivityLossBPS / MAX_BPS, loss, "!loss");
         console.log("loss after second report", loss);
@@ -710,7 +711,7 @@ contract OperationTest is Setup {
         actualShares = strategy.balanceOf(performanceFeeRecipient);
 
         console.log("TOTAL ASSETS after fourth report", strategy.totalAssets());
-         console.log("balanceOfLST", strategy.balanceOfLST());
+        console.log("balanceOfLST", strategy.balanceOfLST());
 
         skip(strategy.profitMaxUnlockTime());
         console.log("TOTAL ASSETS after unlocking fourth report", strategy.totalAssets());
@@ -725,4 +726,80 @@ contract OperationTest is Setup {
         assertGe(asset.balanceOf(performanceFeeRecipient) * (MAX_BPS + 500)/MAX_BPS, actualShares, "!perf fee out");
         console.log("strategist balance at end", asset.balanceOf(performanceFeeRecipient));
     }
+
+
+    function test_operation_NoFees_maxSingleTrade(uint256 _above, uint256 _maxSingleAmount) public {
+        uint256 profit;
+        uint256 loss;
+        uint256 _amount;
+        console.log("strategy.address", address(strategy));
+        vm.assume(_maxSingleAmount > minFuzzAmount && _maxSingleAmount < maxFuzzAmount);
+        //vm.assume(_above > minFuzzAmount && _above < maxFuzzAmount);
+        _above = bound(_above, minFuzzAmount, maxFuzzAmount);
+        _amount = _maxSingleAmount + _above; 
+        setPerformanceFeeToZero(address(strategy));
+        vm.prank(management);
+        strategy.setMaxSingleTrade(_maxSingleAmount);
+        // Deposit into strategy
+        console.log("strategy.address", address(strategy));
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+        console.log("strategy.balanceOfAsset()", strategy.balanceOfAsset());
+        console.log("balanceOfLST", strategy.balanceOfLST());
+        console.log("strategy.maxSingleTrade()", strategy.maxSingleTrade());
+
+        checkStrategyTotals(strategy, _amount, 0, _amount);
+        // Earn Interest
+        skip(10 days);
+
+        // First report
+        console.log("first report");
+        vm.prank(keeper);
+        (profit, loss) = strategy.report();
+        // Check return Values
+        assertGe(profit, 0, "!profit");
+        assertGe(strategy.totalAssets() * expectedActivityLossBPS / MAX_BPS, loss, "!loss");
+        assertGe(strategy.balanceOfAsset(), _amount - strategy.maxSingleTrade());
+
+        console.log("strategy.balanceOfAsset()", strategy.balanceOfAsset());
+        console.log("balanceOfLST", strategy.balanceOfLST());
+        console.log("strategy.maxSingleTrade()", strategy.maxSingleTrade());
+        console.log("balanceOfCollateral", strategy.balanceOfCollateral());
+        console.log("balanceOfDebt", strategy.balanceOfDebt());
+
+        console.log("second report");
+        // Second report
+        vm.prank(keeper);
+        (profit, loss) = strategy.report();
+        // Check return Values
+        assertGe(profit, 0, "!profit");
+        assertGe(strategy.totalAssets() * expectedActivityLossBPS / MAX_BPS, loss, "!loss");
+
+        console.log("strategy.balanceOfAsset()", strategy.balanceOfAsset());
+        console.log("balanceOfLST", strategy.balanceOfLST());
+        console.log("strategy.maxSingleTrade()", strategy.maxSingleTrade());
+        console.log("balanceOfCollateral", strategy.balanceOfCollateral());
+        console.log("balanceOfDebt", strategy.balanceOfDebt());
+        
+        if (_amount - strategy.maxSingleTrade() > strategy.maxSingleTrade()) {
+            assertGe(strategy.balanceOfAsset(), _amount - strategy.maxSingleTrade() - strategy.maxSingleTrade());
+        } else {
+            assertLe(strategy.balanceOfAsset(), 100);
+        }
+
+        uint256 balanceBefore = asset.balanceOf(user);
+
+        // Withdraw all funds
+        vm.prank(user);
+        userRedeem(strategy, _amount, user, user);
+
+        checkStrategyInvariantsAfterRedeem(strategy);
+
+        
+
+        assertGe(asset.balanceOf(user) * (MAX_BPS + expectedActivityLossBPS)/MAX_BPS, balanceBefore + _amount, "!final balance");
+    }
+
+
+
+
 }

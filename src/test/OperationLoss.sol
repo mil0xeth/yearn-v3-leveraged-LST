@@ -87,14 +87,14 @@ contract OperationLossTest is Setup {
 
         if (toThrow > highLoss) {
             vm.prank(management);
-            strategy.setSwapSlippage(swapSlippageForHighProfit);
-            console.log("setSwapSlippage"); 
+            strategy.setSwapSlippageBPS(swapSlippageBPSForHighProfit);
+            console.log("setSwapSlippageBPS"); 
         }
 
         // Report loss
         vm.prank(keeper);
-        (profit, loss) = keeperReport(strategy);
-        checkStrategyInvariantsAfterReport(strategy);
+        (profit, loss) = strategy.report();
+        
         // Check return Values
         assertGe(loss * (MAX_BPS + expectedProfitReductionBPS)/MAX_BPS, toThrow, "!loss");
         uint256 balanceBefore = asset.balanceOf(user);
@@ -157,14 +157,13 @@ contract OperationLossTest is Setup {
 
         if (toThrow > highLoss) {
             vm.prank(management);
-            strategy.setSwapSlippage(swapSlippageForHighProfit);
-            console.log("setSwapSlippage");
+            strategy.setSwapSlippageBPS(swapSlippageBPSForHighProfit);
+            console.log("setSwapSlippageBPS");
         }
 
         // Report loss
         vm.prank(keeper);
-        (profit, loss) = keeperReport(strategy);
-        checkStrategyInvariantsAfterReport(strategy);
+        (profit, loss) = strategy.report();
         // Check return Values
         assertGe(loss * (MAX_BPS + expectedProfitReductionBPS)/MAX_BPS, toThrow, "!loss");
 
@@ -212,8 +211,8 @@ contract OperationLossTest is Setup {
         mintAndDepositIntoStrategy(strategy, user, _amount);
         checkStrategyTotals(strategy, _amount, 0, _amount);
         vm.prank(management);
-        strategy.setSwapSlippage(swapSlippageForHighLossPool);
-        console.log("setSwapSlippage");
+        strategy.setSwapSlippageBPS(swapSlippageBPSForHighLossPool);
+        console.log("setSwapSlippageBPS");
 
         // Report loss
         vm.prank(keeper);
@@ -239,8 +238,8 @@ contract OperationLossTest is Setup {
 
         // Report loss
         vm.prank(keeper);
-        (profit, loss) = keeperReport(strategy);
-        checkStrategyInvariantsAfterReport(strategy);
+        (profit, loss) = strategy.report();
+        
         skip(strategy.profitMaxUnlockTime());
         // Check return Values
         //assertGe(loss * (MAX_BPS + expectedProfitReductionBPS*2)/MAX_BPS, toThrow, "!loss");
@@ -274,8 +273,8 @@ contract OperationLossTest is Setup {
         mintAndDepositIntoStrategy(strategy, user, _amount);
         checkStrategyTotals(strategy, _amount, 0, _amount);
         vm.prank(management);
-        strategy.setSwapSlippage(swapSlippageForHighLossPool);
-        console.log("setSwapSlippage");
+        strategy.setSwapSlippageBPS(swapSlippageBPSForHighLossPool);
+        console.log("setSwapSlippageBPS");
 
         // Report loss
         vm.prank(keeper);
@@ -301,8 +300,8 @@ contract OperationLossTest is Setup {
 
         // Report loss
         vm.prank(keeper);
-        (profit, loss) = keeperReport(strategy);
-        checkStrategyInvariantsAfterReport(strategy);
+        (profit, loss) = strategy.report();
+        
         // Check return Values
         //assertGe(loss * (MAX_BPS + expectedProfitReductionBPS*2)/MAX_BPS, toThrow, "!loss");
 

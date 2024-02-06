@@ -14,8 +14,10 @@ contract ShutdownTest is Setup {
     }
     */
 
-    function testFail_withdrawAboveMaxSingleTrade() public {
-        uint256 _amount = strategy.maxSingleTrade() + ONE_ASSET; //just above maxSingleTrade
+    function testFail_withdrawAboveMaxSingleWithdraw() public {
+        vm.prank(management);
+        strategy.setMaxSingleWithdraw(100*ONE_ASSET);
+        uint256 _amount = strategy.maxSingleWithdraw() + ONE_ASSET; //just above maxSingleTrade
         //mintAndDepositIntoStrategy(strategy, user, _amount);
         mintAndDepositIntoStrategy(strategy, user, _amount);
         vm.prank(keeper);
@@ -26,7 +28,7 @@ contract ShutdownTest is Setup {
     }
 
 
-    function test_shudownCanWithdraw(uint256 _amount) public {
+    function test_shutdownCanWithdraw(uint256 _amount) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
 
         // Deposit into strategy

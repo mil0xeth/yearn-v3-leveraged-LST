@@ -24,7 +24,7 @@ contract MainTest is Setup {
 
     function test_main() public {
         //init
-        uint256 _amount = 500e18;
+        uint256 _amount = 50e18;
         uint256 profit;
         uint256 loss;
         console.log("asset: ", asset.symbol());
@@ -42,6 +42,7 @@ contract MainTest is Setup {
         console.log("strategy.totalIdle() after deposit: ", strategy.totalIdle() );
         console.log("strategy.balanceOfAsset() after deposit", strategy.balanceOfAsset());
         console.log("strategy.balanceOfLST()", strategy.balanceOfLST());
+        console.log("strategy.currentLoanToValue AFTER DEPOSIT:", strategy.currentLoanToValue());
 
         // Report profit / loss
         (profit, loss) = keeperReport(strategy);
@@ -89,7 +90,8 @@ contract MainTest is Setup {
         console.log("strategy.currentLoanToValue()", strategy.currentLoanToValue());
 
         // Report profit / loss
-        (profit, loss) = keeperReport(strategy);
+        vm.prank(keeper);
+        (profit, loss) = strategy.report();
         console.log("profit: ", profit );
         console.log("loss: ", loss );
         console.log("strategy.balanceOfAsset()", strategy.balanceOfAsset());
