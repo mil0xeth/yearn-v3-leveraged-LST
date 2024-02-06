@@ -1,16 +1,10 @@
-# Liquid Staking Token Staker (LST) for yearn V3
-Strategy stakes token into LST, e.g. MATIC into stMATIC and collect yields.
-Supports: stETH, stMatic, MaticX.
+# Leveraged Liquid Staking Token (LST) Strategy for yearn V3
+yearn-v3 strategy leveraging a Liquid Staking Token (LST) on AAVE for leveraged yield.
+Supports: wstETH on all chains. stMATIC on Polygon.
 
-This repo uses [Foundry](https://book.getfoundry.sh/) for tests.
-
-For a more complete overview of how the Tokenized Strategies work please visit the [TokenizedStrategy Repo](https://github.com/yearn/tokenized-strategy).
-
-## How to start
 
 ### Requirements
 First you will need to install [Foundry](https://book.getfoundry.sh/getting-started/installation).
-NOTE: If you are on a windows machine it is recommended to use [WSL](https://learn.microsoft.com/en-us/windows/wsl/install)
 
 ### Set your environment Variables
 
