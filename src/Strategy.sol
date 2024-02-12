@@ -265,7 +265,7 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
     function wind(
         uint256 _assetAmountInitial,
         uint256 _targetLoanToValue
-    ) public {
+    ) internal {
         uint256 assetPerLST = getAssetPerLST();
         uint256 currentDebt = _balanceOfDebt();
         uint256 maxDeposit = _maxDepositableCollateral();
@@ -320,7 +320,7 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
     
     function unwind(
         uint256 _percentageOfSharesToRedeem
-    ) public {
+    ) internal {
         if (_balanceOfCollateral() < COLLATERAL_DUST){
             return;
         }
@@ -388,7 +388,7 @@ contract Strategy is BaseHealthCheck, UniswapV3Swapper {
 
     // ----------------- FLASHLOAN -----------------
     function _initFlashLoan(bytes memory data, uint256 amount)
-        public
+        internal
     {
         address[] memory tokens = new address[](1);
         tokens[0] = address(asset);
